@@ -1,24 +1,42 @@
 package main
 
 import (
+	"fmt"
 	"library-management-system/database"
+	"library-management-system/server"
 	"os"
 
-	"gorm.io/driver/mysql"
+	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 )
 
 var DB *gorm.DB
 
-func main() {
-	user := os.Getenv("DATABASE_USER")
-	password := os.Getenv("DATABASE_PASSWORD")
-	var err error
-	DB, err = gorm.Open(mysql.Open(user+":"+password+"@tcp(127.0.0.1:3306)/test?charset=utf8mb4&parseTime=True&loc=Local"), &gorm.Config{})
-	if err != nil {
-		panic("failed to connect database")
-	}
-	DB.AutoMigrate(&database.Book{}, &database.Card{}, &database.Borrow{})
+type AppConfig struct {
+	Server   server.ServerConfig     `yaml:"server"`
+	Database database.DatabaseConfig `yaml:"database"`
+}
 
-	println("Hello, World!")
+func main() {
+	logrus.SetFormatter(&logrus.TextFormatter{
+		PadLevelText:  true,
+		FullTimestamp: true,
+	})
+
+	file, err := os.Open("config.yaml")
+	if err != nil {
+		fmt.Println("Failed to open config file: ", err)
+		return
+	}
+	defer file.Close()
+
+	var config AppConfig
+	if err := yaml.NewDecoder(file).Decode(&config); err != nil {
+		fmt.Println("Failed to parse config file: ", err)
+		return
+	}
+
+	database.ConnectDatabase(config.Database)
+	server.InitServer(config.Server)
 }
