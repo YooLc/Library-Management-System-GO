@@ -5,12 +5,17 @@ import (
 	"library-management-system/database"
 )
 
-type BorrowHistories struct {
+type BorrowHistoryItem struct {
 	database.Book
-	BorrowTime int64 `json:"borrowTime"`
-	ReturnTime int64 `json:"returnTime"`
+	Borrow_time int64 `json:"borrow_time"`
+	Return_time int64 `json:"return_time"`
 }
 
-func (b BorrowHistories) String() string {
-	return "BorrowHistories{ Book , BorrowTime: " + fmt.Sprint(b.BorrowTime) + ", ReturnTime: " + fmt.Sprint(b.ReturnTime) + "}"
+type BorrowHistories struct {
+	Count int                 `json:"cnt"`
+	Items []BorrowHistoryItem `json:"items"`
+}
+
+func (item BorrowHistoryItem) String() string {
+	return fmt.Sprintf("BorrowHistory{Book: %s, Borrow Time: %v, Return Time: %v}", item.Book.Title, item.Borrow_time, item.Return_time)
 }

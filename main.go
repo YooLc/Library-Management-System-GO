@@ -14,7 +14,7 @@ import (
 var DB *gorm.DB
 
 type AppConfig struct {
-	Server   server.ServerConfig     `yaml:"server"`
+	Server   server.Config           `yaml:"server"`
 	Database database.DatabaseConfig `yaml:"database"`
 }
 

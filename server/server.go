@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"library-management-system/database"
+	"library-management-system/server/queries"
 	"net/http"
 	"sync"
 
@@ -10,7 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type ServerConfig struct {
+type Config struct {
 	Host string `yaml:"host"`
 	Port string `yaml:"port"`
 }
@@ -20,10 +21,14 @@ var mutex = &sync.Mutex{}
 func response(w http.ResponseWriter, resp APIResult) {
 	w.Header().Set("Content-Type", "application/json")
 	bytes, _ := json.Marshal(resp)
-	w.Write(bytes)
+	_, err := w.Write(bytes)
+	if err != nil {
+		logrus.Fatal("unable to response")
+		return
+	}
 }
 
-func storeBook(w http.ResponseWriter, r *http.Request) {
+func storeBookHandler(w http.ResponseWriter, r *http.Request) {
 	// Lock mutex
 	mutex.Lock()
 	defer mutex.Unlock()
@@ -45,7 +50,29 @@ func storeBook(w http.ResponseWriter, r *http.Request) {
 	response(w, result)
 }
 
-func InitServer(config ServerConfig) {
+func incBookStockHandler(w http.ResponseWriter, r *http.Request) {
+	// Lock mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Parse request body
+	var query queries.IncStockQuery
+	err := json.NewDecoder(r.Body).Decode(&query)
+	if err != nil {
+		response(w, APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request body",
+			Payload: nil,
+		})
+		return
+	}
+
+	// Increment book stock
+	result := IncBookStock(query.Book, query.Count)
+	response(w, result)
+}
+
+func InitServer(config Config) {
 	// Configure logrus
 	// initLogger()
 	mux := http.NewServeMux()
@@ -66,9 +93,14 @@ func InitServer(config ServerConfig) {
 		}
 	})
 
-	mux.HandleFunc("/store", storeBook)
+	mux.HandleFunc("/store", storeBookHandler)
+	mux.HandleFunc("/incStock", incBookStockHandler)
 
 	host, port := config.Host, config.Port
-	logrus.Info("Server is running on " + host + ":" + port)
-	http.ListenAndServe(host+":"+port, handler)
+	logrus.Info("Server will run on " + host + ":" + port)
+	err := http.ListenAndServe(host+":"+port, handler)
+	if err != nil {
+		logrus.Panic("Failed to start server: ", err)
+		return
+	}
 }
