@@ -15,6 +15,23 @@ type APIResult struct {
 	Payload interface{} `json:"payload"`
 }
 
+/**
+ * Note:
+ *      (1) all functions in this interface will be regarded as a
+ *          transaction. this means that after successfully completing
+ *          all operations in a function, you need to call commit(),
+ *          or call rollback() if one of the operations in a function fails.
+ *          as an example, you can see {@link LibraryManagementSystemImpl#resetDatabase}
+ *          to find how to use commit() and rollback().
+ *      (2) for each function, you need to briefly introduce how to
+ *          achieve this function and how to solve challenges in your
+ *          lab report.
+ *      (3) if you don't know what the function means, or what it is
+ *          supposed to do, looking to the test code might help.
+ */
+
+/* Interface for books */
+
 // StoreBook
 // register a book to database.
 //
@@ -26,6 +43,9 @@ type APIResult struct {
 //
 //	@param book all attributes of the book
 func StoreBook(book database.Book) APIResult {
+	// Store the book
+	// book_id is set via gorm
+	// the database prevents duplicate book entries by primary key constraint
 	if err := database.DB.Create(&book).Error; err != nil {
 		return APIResult{
 			Ok:      false,
@@ -51,28 +71,30 @@ func StoreBook(book database.Book) APIResult {
 //
 // @param bookId book's book_id
 // @param deltaStock increase count to book's stock, must be greater
-func IncBookStock(bookId int, count int) APIResult {
+func IncBookStock(bookId int, deltaStock int) APIResult {
 	// Check the correctness of book_id
 	book := database.Book{}
 	if err := database.DB.First(&book, bookId).Error; err != nil {
 		return APIResult{
 			Ok:      false,
-			Message: "Book not found",
+			Message: "This book does not exist",
 			Payload: nil,
 		}
 	}
 
-	// Check the result of book.stock + deltaStock is not negative
-	if book.Stock+count < 0 {
+	// Check the result of book.stock+deltaStock is not negative
+	if book.Stock+deltaStock < 0 {
 		return APIResult{
 			Ok:      false,
-			Message: "Stock count becomes invalid after incrementing, please check the arguments",
+			Message: "Stock deltaStock becomes invalid after incrementing, please check the arguments",
 			Payload: nil,
 		}
 	}
 
 	// Performing the increment operation
-	if err := database.DB.Model(&book).Update("stock", book.Stock+count).Error; err != nil {
+	// By default, gorm perform write (create/update/delete) operations
+	// run inside a transaction to ensure data consistency
+	if err := database.DB.Model(&book).Update("stock", book.Stock+deltaStock).Error; err != nil {
 		return APIResult{
 			Ok:      false,
 			Message: "Failed to increment book stock",
@@ -102,9 +124,11 @@ func IncBookStock(bookId int, count int) APIResult {
 //	    the risk of SQL injection attack!!!
 //
 // @param books list of books to be stored
-func StoreBookList(books queries.BookList) APIResult {
+func StoreBookList(books []database.Book) APIResult {
+	// Batch store books via transaction in gorm
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		for _, book := range books.Books {
+		// Add creation of each book to the transaction
+		for _, book := range books {
 			if err := tx.Create(&book).Error; err != nil {
 				return err
 			}
@@ -209,16 +233,26 @@ func queryBook(conditions queries.BookQueryConditions) APIResult {
 func BorrowBook(borrow database.Borrow) APIResult {
 	borrow.Borrow_time = time.Now().UnixMilli()
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(&borrow).Error; err != nil {
-			return err
-		}
-
-		stock := 0
+		// Check if there are enough books in stock
+		var stock int
 		tx.Model(&database.Book{}).Select("stock").Where("book_id = ?", borrow.Book_id).Row().Scan(&stock)
 		if stock <= 0 {
 			return fmt.Errorf("book out of stock")
 		}
 
+		// Check if the user has not borrowed the book or has returned it
+		var count int64
+		tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.Card_id, borrow.Book_id).Count(&count)
+		if count > 0 { // There is a borrow record without return time
+			return fmt.Errorf("user has not returned the book")
+		}
+
+		/* Check is OKay */
+		// Borrow the book
+		if err := tx.Create(&borrow).Error; err != nil {
+			return err
+		}
+		// Update the stock of the book
 		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.Book_id).Update("stock", gorm.Expr("stock - 1")).Error; err != nil {
 			return err
 		}
@@ -227,10 +261,11 @@ func BorrowBook(borrow database.Borrow) APIResult {
 		return nil
 	})
 
+	// If transaction failed, return error
 	if err != nil {
 		return APIResult{
 			Ok:      false,
-			Message: "Failed to borrow book",
+			Message: "Failed to borrow book, maybe the user haven't returned the book or the book is out of stock",
 			Payload: err,
 		}
 	}
@@ -249,18 +284,20 @@ func BorrowBook(borrow database.Borrow) APIResult {
 // borrow information, include borrower & book's id & return time
 func ReturnBook(borrow database.Borrow) APIResult {
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
-		// return_time = 0 because a book can be borrowed multiple times by the same card
+		// return_time = 0 because a book can be borrowed
+		// multiple times by the same card (but not the same time)
 		if err := tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.Card_id, borrow.Book_id).Update("return_time", time.Now().UnixMilli()).Error; err != nil {
 			return err
 		}
 
+		// Update the stock of the book
 		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.Book_id).Update("stock", gorm.Expr("stock + 1")).Error; err != nil {
 			return err
 		}
-
 		return nil
 	})
 
+	// If transaction failed, return error
 	if err != nil {
 		return APIResult{
 			Ok:      false,
@@ -320,8 +357,31 @@ func RegisterCard(card database.Card) APIResult {
 // this card should not be removed.
 //
 // @param cardId card to be removed
-func RemoveCard(card_id int) APIResult {
-	return APIResult{}
+func RemoveCard(cardId int) APIResult {
+	// Check if there exists any un-returned books under this user
+	var count int64
+	database.DB.Model(&database.Borrow{}).Where("card_id = ? and return_time = 0", cardId).Count(&count)
+	if count > 0 {
+		return APIResult{
+			Ok:      false,
+			Message: "This user has un-returned books",
+			Payload: nil,
+		}
+	}
+
+	// Remove the card
+	if err := database.DB.Delete(&database.Card{}, cardId).Error; err != nil {
+		return APIResult{
+			Ok:      false,
+			Message: "Failed to remove card",
+			Payload: err,
+		}
+	}
+	return APIResult{
+		Ok:      true,
+		Message: "Card removed successfully",
+		Payload: nil,
+	}
 }
 
 // ShowCards
