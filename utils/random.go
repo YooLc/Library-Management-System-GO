@@ -36,33 +36,33 @@ var timeEnd, _ = time.Parse(time.RFC3339, "2024-12-31T23:59:59Z")
 
 func RandomBook() database.Book {
 	return database.Book{
-		Category:    randomCategory(),
-		Title:       randomTitle(),
-		Press:       randomPress(),
-		PublishYear: randomPublishYear(),
-		Author:      randomAuthor(),
+		Category:    RandomCategory(),
+		Title:       RandomTitle(),
+		Press:       RandomPress(),
+		PublishYear: RandomPublishYear(),
+		Author:      RandomAuthor(),
 		Price:       RandomPrice(),
 		Stock:       RandomStock(),
 	}
 }
 
-func randomCategory() string {
+func RandomCategory() string {
 	return categories[rand.Intn(len(categories))]
 }
 
-func randomPress() string {
+func RandomPress() string {
 	return press[rand.Intn(len(press))]
 }
 
-func randomAuthor() string {
+func RandomAuthor() string {
 	return authors[rand.Intn(len(authors))]
 }
 
-func randomTitle() string {
+func RandomTitle() string {
 	return titles[rand.Intn(len(titles))]
 }
 
-func randomPublishYear() int {
+func RandomPublishYear() int {
 	return rand.Intn(25) + 2000
 }
 
@@ -74,10 +74,10 @@ func RandomStock() int {
 	return rand.Intn(100) + 1
 }
 
-func randomDepartment() string {
+func RandomDepartment() string {
 	return departments[rand.Intn(len(departments))]
 }
 
-func randomTime() int64 {
+func RandomTime() int64 {
 	return rand.Int63n(timeEnd.Unix()-timeStart.Unix()) + timeStart.Unix()
 }

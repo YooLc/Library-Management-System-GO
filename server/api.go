@@ -186,11 +186,20 @@ func RemoveBook(book database.Book) APIResult {
 // Note that you should not modify its BookID and stock!
 //
 // @param book the book to be modified
-func ModifyBookInfo(book database.Book) APIResult {
-	// Todo: Avoid modifying BookID and stock
+func ModifyBookInfo(book *database.Book) APIResult {
+	// Avoid modifying BookID and stock
+	origBook := database.Book{}
+	//println(origBook.BookId, origBook.Title)
+	if err := database.DB.First(&origBook, book.BookId).Error; err != nil {
+		return APIResult{
+			Ok:      false,
+			Message: "That book that does not exist, you cannot modify book_id",
+			Payload: nil,
+		}
+	}
 
 	// Modify the book info
-	if err := database.DB.Model(&book).Updates(book); err != nil {
+	if err := database.DB.Model(book).Omit("book_id", "stock").Updates(book).Error; err != nil {
 		return APIResult{
 			Ok:      false,
 			Message: "Failed to modify book info",

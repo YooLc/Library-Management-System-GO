@@ -170,13 +170,13 @@ func TestBulkRegisterBook(t *testing.T) {
 	database.ResetDatabase()
 
 	/* simply insert some books to database */
-	var books = make(utils.BookMap)
+	var books = make(utils.BookSet)
 	for i := 0; i < numBulkBooks; i++ {
 		book := utils.RandomBook()
 		books.Insert(book)
 	}
 
-	///* provide some duplicate records */
+	/* provide some duplicate records */
 	bookList1 := books.List()
 	for i := 0; i < numDuplicateBooks; i++ {
 		newBook := *bookList1[rand.Intn(len(bookList1))]
@@ -212,5 +212,64 @@ func TestBulkRegisterBook(t *testing.T) {
 	})
 	for i := 0; i < len(bookList2); i++ {
 		assert.Equal(t, bookList2[i], selectedResults2.Results[i])
+	}
+}
+
+func TestModifyBookInfo(t *testing.T) {
+	/* simply insert some books to database */
+	books := make(utils.BookSet)
+	for i := 0; i < 100; i++ {
+		books.Insert(utils.RandomBook())
+	}
+	bookList := books.List()
+	for _, book := range bookList {
+		assert.Equal(t, StoreBook(book).Ok, true)
+	}
+	/* randomly change books */
+	for _, book := range bookList {
+		// remove old book from book set
+		assert.Equal(t, books.Remove(*book), true)
+		oldStock := book.Stock      // book's stock cannot be changed by modifyBookInfo
+		for books.Contains(*book) { // make sure the new book does not exist in database
+			// use bit mask to determine which field to update
+			var mask = rand.Intn(128)
+			if mask&0b0000_0001 > 0 {
+				book.Category = utils.RandomCategory()
+			}
+			if mask&0b0000_0010 > 0 {
+				book.Title = utils.RandomTitle()
+			}
+			if mask&0b0000_0100 > 0 {
+				book.Press = utils.RandomPress()
+			}
+			if mask&0b0000_1000 > 0 {
+				book.PublishYear = utils.RandomPublishYear()
+			}
+			if mask&0b0001_0000 > 0 {
+				book.Author = utils.RandomAuthor()
+			}
+			if mask&0b0010_0000 > 0 {
+				book.Price = utils.RandomPrice()
+			}
+			if mask&0b0100_0000 > 0 {
+				book.Stock = utils.RandomStock()
+			}
+		}
+		// insert new book to book set
+		books.Insert(*book)
+		assert.Equal(t, ModifyBookInfo(book).Ok, true)
+		book.Stock = oldStock
+	}
+	// compare results
+	queryResult := QueryBooks(queries.BookQueryConditions{})
+	assert.Equal(t, queryResult.Ok, true)
+	selectedResults := queryResult.Payload.(queries.BookQueryResults)
+	assert.Equal(t, len(bookList), selectedResults.Count)
+	bookList = books.List()
+	sort.Slice(bookList, func(i, j int) bool {
+		return bookList[i].BookId < bookList[j].BookId
+	})
+	for i := 0; i < len(bookList); i++ {
+		assert.Equal(t, bookList[i], selectedResults.Results[i])
 	}
 }
