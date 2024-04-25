@@ -170,25 +170,22 @@ func TestBulkRegisterBook(t *testing.T) {
 	database.ResetDatabase()
 
 	/* simply insert some books to database */
-	var books = make(map[database.Book]int)
+	var books = make(utils.BookMap)
 	for i := 0; i < numBulkBooks; i++ {
 		book := utils.RandomBook()
-		books[book] = i
+		books.Insert(book)
 	}
 
-	/* provide some duplicate records */
-	bookList1 := make([]*database.Book, 0, len(books))
-	for book := range books {
-		bookList1 = append(bookList1, &book)
-	}
+	///* provide some duplicate records */
+	bookList1 := books.List()
 	for i := 0; i < numDuplicateBooks; i++ {
 		newBook := *bookList1[rand.Intn(len(bookList1))]
 		cb := &newBook
 		// randomly change some attributes
-		//if rand.Intn(2) == 0 {
-		cb.Stock = utils.RandomStock()
-		cb.Price = utils.RandomPrice()
-		//}
+		if rand.Intn(2) == 0 {
+			cb.Stock = utils.RandomStock()
+			cb.Price = utils.RandomPrice()
+		}
 		bookList1 = append(bookList1, cb)
 	}
 	// shuffle the book list
@@ -204,10 +201,7 @@ func TestBulkRegisterBook(t *testing.T) {
 	assert.Equal(t, 0, selectedResults1.Count)
 
 	/* normal batch insert */
-	bookList2 := make([]*database.Book, 0, len(books))
-	for book := range books {
-		bookList2 = append(bookList2, &book)
-	}
+	bookList2 := books.List()
 	assert.Equal(t, StoreBooks(bookList2).Ok, true)
 	queryResult2 := QueryBooks(queries.BookQueryConditions{})
 	assert.Equal(t, queryResult2.Ok, true)

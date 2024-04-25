@@ -136,6 +136,11 @@ func StoreBooks(books []*database.Book) APIResult {
 		return nil
 	})
 	if err != nil {
+		// Restore BookId, which is assigned by gorm before inserting into the database
+		// Even if the transaction fails, the BookId is still assigned
+		for _, book := range books {
+			book.BookId = 0
+		}
 		return APIResult{
 			Ok:      false,
 			Message: "Failed to store books, maybe one of them already exists",

@@ -1,5 +1,13 @@
 package database
 
+type BookKey struct {
+	Category    string // `json:"category" gorm:"size:63;not null;uniqueIndex:idx_book"`
+	Title       string // `json:"title" gorm:"size:63;not null;uniqueIndex:idx_book"`
+	Press       string // `json:"press" gorm:"size:63;not null;uniqueIndex:idx_book"`
+	PublishYear int    // `json:"publish_year" gorm:"not null;uniqueIndex:idx_book"`
+	Author      string // `json:"author" gorm:"size:63;not null;uniqueIndex:idx_book"`
+}
+
 type Book struct {
 	BookId      int     `json:"book_id" gorm:"primaryKey;autoIncrement"`
 	Category    string  `json:"category" gorm:"size:63;not null;uniqueIndex:idx_book"`
