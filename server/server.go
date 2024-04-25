@@ -17,7 +17,7 @@ type Config struct {
 
 var mutex = &sync.Mutex{}
 
-func response(w http.ResponseWriter, resp APIResult) {
+func response(w http.ResponseWriter, resp database.APIResult) {
 	w.Header().Set("Content-Type", "application/json")
 	bytes, _ := json.Marshal(resp)
 	_, err := w.Write(bytes)
@@ -31,12 +31,13 @@ func storeBookHandler(w http.ResponseWriter, r *http.Request) {
 	// Lock mutex
 	mutex.Lock()
 	defer mutex.Unlock()
+	server := Server{}
 
 	// Parse request body
 	var book database.Book
 	err := json.NewDecoder(r.Body).Decode(&book)
 	if err != nil {
-		response(w, APIResult{
+		response(w, database.APIResult{
 			Ok:      false,
 			Message: "Invalid Arguments: failed to parse request body",
 			Payload: nil,
@@ -45,7 +46,7 @@ func storeBookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store book
-	result := StoreBook(&book)
+	result := server.StoreBook(&book)
 	response(w, result)
 }
 

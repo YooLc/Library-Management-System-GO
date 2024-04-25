@@ -9,11 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type APIResult struct {
-	Ok      bool        `json:"ok"`
-	Message string      `json:"message"`
-	Payload interface{} `json:"payload"`
-}
+type Server struct{}
 
 /**
  * Note:
@@ -42,18 +38,18 @@ type APIResult struct {
 //	         exists in the library system.
 //
 //	@param book all attributes of the book
-func StoreBook(book *database.Book) APIResult {
+func (s *Server) StoreBook(book *database.Book) database.APIResult {
 	// Store the book
 	// BookID is set via gorm
 	// the database prevents duplicate book entries by primary key constraint
 	if err := database.DB.Create(book).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to store book, maybe the book already exists",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book stored successfully",
 		Payload: book.BookId,
@@ -71,11 +67,11 @@ func StoreBook(book *database.Book) APIResult {
 //
 // @param bookId book's BookID
 // @param deltaStock increase count to book's stock, must be greater
-func IncBookStock(bookId int, deltaStock int) APIResult {
+func (s *Server) IncBookStock(bookId int, deltaStock int) database.APIResult {
 	// Check the correctness of BookID
 	book := database.Book{}
 	if err := database.DB.First(&book, bookId).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "This book does not exist",
 			Payload: nil,
@@ -84,7 +80,7 @@ func IncBookStock(bookId int, deltaStock int) APIResult {
 
 	// Check the result of book.stock+deltaStock is not negative
 	if book.Stock+deltaStock < 0 {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Stock deltaStock becomes invalid after incrementing, please check the arguments",
 			Payload: nil,
@@ -95,13 +91,13 @@ func IncBookStock(bookId int, deltaStock int) APIResult {
 	// By default, gorm perform write (create/update/delete) operations
 	// run inside a transaction to ensure data consistency
 	if err := database.DB.Model(&book).Update("stock", book.Stock+deltaStock).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to increment book stock",
 			Payload: nil,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book stock incremented successfully",
 		Payload: nil,
@@ -124,7 +120,7 @@ func IncBookStock(bookId int, deltaStock int) APIResult {
 //	    the risk of SQL injection attack!!!
 //
 // @param books list of books to be stored
-func StoreBooks(books []*database.Book) APIResult {
+func (s *Server) StoreBooks(books []*database.Book) database.APIResult {
 	// Batch store books via transaction in gorm
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Add creation of each book to the transaction
@@ -141,13 +137,13 @@ func StoreBooks(books []*database.Book) APIResult {
 		for _, book := range books {
 			book.BookId = 0
 		}
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to store books, maybe one of them already exists",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Books stored successfully",
 		Payload: nil,
@@ -162,18 +158,18 @@ func StoreBooks(books []*database.Book) APIResult {
 //	the book should not be removed!
 //
 //	@param bookId the book to be removed
-func RemoveBook(book database.Book) APIResult {
+func (s *Server) RemoveBook(book database.Book) database.APIResult {
 	// Check if someone has not returned this book
 
 	// Remove the book
 	if err := database.DB.Delete(&book).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to remove book",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book removed successfully",
 		Payload: nil,
@@ -186,12 +182,12 @@ func RemoveBook(book database.Book) APIResult {
 // Note that you should not modify its BookID and stock!
 //
 // @param book the book to be modified
-func ModifyBookInfo(book *database.Book) APIResult {
+func (s *Server) ModifyBookInfo(book *database.Book) database.APIResult {
 	// Avoid modifying BookID and stock
 	origBook := database.Book{}
 	//println(origBook.BookId, origBook.Title)
 	if err := database.DB.First(&origBook, book.BookId).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "That book that does not exist, you cannot modify book_id",
 			Payload: nil,
@@ -200,13 +196,13 @@ func ModifyBookInfo(book *database.Book) APIResult {
 
 	// Modify the book info
 	if err := database.DB.Model(book).Omit("book_id", "stock").Updates(book).Error; err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to modify book info",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book info modified successfully",
 		Payload: book,
@@ -226,10 +222,10 @@ func ModifyBookInfo(book *database.Book) APIResult {
 //
 // @param conditions query conditions
 //
-// @return query results should be returned by ApiResult.payload
+// @return query results should be returned by database.APIResult.payload
 //
 //	and should be an instance of {@link queries.BookQueryResults}
-func QueryBooks(conditions queries.BookQueryConditions) APIResult {
+func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.APIResult {
 	// Query books
 	books := queries.BookQueryResults{}
 
@@ -259,14 +255,14 @@ func QueryBooks(conditions queries.BookQueryConditions) APIResult {
 	result := query.Order("book_id asc").Scan(&books.Results)
 
 	if result.Error != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to query books",
 			Payload: result.Error,
 		}
 	}
 	books.Count = int(result.RowsAffected)
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Books queried successfully",
 		Payload: books,
@@ -284,7 +280,7 @@ func QueryBooks(conditions queries.BookQueryConditions) APIResult {
 //
 // @param borrow information, include borrower &
 // book's id & time
-func BorrowBook(borrow database.Borrow) APIResult {
+func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 	borrow.BorrowTime = time.Now().UnixMilli()
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Check if there are enough books in stock
@@ -320,13 +316,13 @@ func BorrowBook(borrow database.Borrow) APIResult {
 
 	// If transaction failed, return error
 	if err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to borrow book, maybe the user haven't returned the book or the book is out of stock",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book borrowed successfully",
 		Payload: nil,
@@ -339,7 +335,7 @@ func BorrowBook(borrow database.Borrow) APIResult {
 //
 // @param borrow
 // borrow information, include borrower & book's id & return time
-func ReturnBook(borrow database.Borrow) APIResult {
+func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// return_time = 0 because a book can be borrowed
 		// multiple times by the same card (but not the same time)
@@ -356,13 +352,13 @@ func ReturnBook(borrow database.Borrow) APIResult {
 
 	// If transaction failed, return error
 	if err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to return book",
 			Payload: err,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Book returned successfully",
 		Payload: nil,
@@ -374,21 +370,21 @@ func ReturnBook(borrow database.Borrow) APIResult {
 // the returned records should be sorted by borrowTime DESC, bookId ASC
 //
 // @param cardId show which card's borrow history
-// @return query results should be returned by ApiResult.payload
+// @return query results should be returned by database.APIResult.payload
 //
 //	and should be an instance of {@link queries.BorrowHistories}
-func ShowBorrowHistories(cardId int) APIResult {
+func (s *Server) ShowBorrowHistories(cardId int) database.APIResult {
 	history := queries.BorrowHistories{}
 	err := database.DB.Model(&database.Borrow{}).Joins("natural join book").Where("borrows.CardId = ?", cardId).Scan(&history.Items)
 	if err != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to fetch borrow histories",
 			Payload: nil,
 		}
 	}
 	history.Count = len(history.Items)
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Borrow histories fetched successfully",
 		Payload: history,
@@ -403,21 +399,17 @@ func ShowBorrowHistories(cardId int) APIResult {
 // completing this operation.
 //
 // @param card all attributes of the card
-func RegisterCard(card database.Card) APIResult {
-	// Check if the card already exists
-	var count int64
-	database.DB.Model(&database.Card{}).Where("card_id = ?", card.CardId).Count(&count)
-	if count > 0 {
-		return APIResult{
+func (s *Server) RegisterCard(card *database.Card) database.APIResult {
+	// Create a new borrow card
+	if err := database.DB.Create(card).Error; err != nil {
+		// Check if the card already exists by primary key
+		return database.APIResult{
 			Ok:      false,
 			Message: "This card already exists",
 			Payload: nil,
 		}
 	}
-
-	// Create a new borrow card
-	database.DB.Create(&card)
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Card registered successfully",
 		Payload: card.CardId,
@@ -431,12 +423,12 @@ func RegisterCard(card database.Card) APIResult {
 // this card should not be removed.
 //
 // @param cardId card to be removed
-func RemoveCard(cardId int) APIResult {
+func (s *Server) RemoveCard(cardId int) database.APIResult {
 	// Check if there exists any un-returned books under this user
 	var count int64
 	database.DB.Model(&database.Borrow{}).Where("card_id = ? and return_time = 0", cardId).Count(&count)
 	if count > 0 {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "This user has un-returned books",
 			Payload: nil,
@@ -444,14 +436,21 @@ func RemoveCard(cardId int) APIResult {
 	}
 
 	// Remove the card
-	if err := database.DB.Delete(&database.Card{}, cardId).Error; err != nil {
-		return APIResult{
+	result := database.DB.Delete(&database.Card{}, cardId)
+	if result.Error != nil {
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to remove card",
-			Payload: err,
+			Payload: result.Error,
+		}
+	} else if result.RowsAffected == 0 {
+		return database.APIResult{
+			Ok:      false,
+			Message: "This card does not exist, maybe it was already removed",
+			Payload: nil,
 		}
 	}
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Card removed successfully",
 		Payload: nil,
@@ -461,21 +460,21 @@ func RemoveCard(cardId int) APIResult {
 // ShowCards
 // list all cards order by card_id.
 //
-// @return query results should be returned by ApiResult.payload
+// @return query results should be returned by database.APIResult.payload
 //
 //	and should be an instance of {@link queries.CardList}
-func ShowCards() APIResult {
+func (s *Server) ShowCards() database.APIResult {
 	cards := queries.CardList{}
 	result := database.DB.Find(&cards.Cards)
 	if result.Error != nil {
-		return APIResult{
+		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to fetch cards",
 			Payload: result.Error,
 		}
 	}
 	cards.Count = int(result.RowsAffected)
-	return APIResult{
+	return database.APIResult{
 		Ok:      true,
 		Message: "Cards fetched successfully",
 		Payload: cards,

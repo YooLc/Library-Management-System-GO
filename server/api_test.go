@@ -43,13 +43,15 @@ func TestMain(m *testing.M) {
 }
 
 func TestBookRegister(t *testing.T) {
+	server := Server{}
 	database.ResetDatabase()
+
 	b0 := database.Book{
 		Category: "Computer Science", Title: "Database System Concepts",
 		Press: "Machine Industry Press", PublishYear: 2023,
 		Author: "Mike", Price: 188.88, Stock: 10,
 	}
-	assert.Equal(t, StoreBook(&b0).Ok, true)
+	assert.Equal(t, server.StoreBook(&b0).Ok, true)
 
 	/* Not allowed to create duplicated records */
 	b1 := database.Book{
@@ -62,11 +64,14 @@ func TestBookRegister(t *testing.T) {
 		Press: "Machine Industry Press", PublishYear: 2023,
 		Author: "Mike", Price: 99.99, Stock: 10,
 	}
-	assert.Equal(t, StoreBook(&b1).Ok, false)
-	assert.Equal(t, StoreBook(&b2).Ok, false)
+	assert.Equal(t, server.StoreBook(&b1).Ok, false)
+	assert.Equal(t, server.StoreBook(&b2).Ok, false)
 }
 
 func TestIncBookStock(t *testing.T) {
+	server := Server{}
+	database.ResetDatabase()
+
 	const numBooks = 50
 	const numRandomTests = 1000
 	/* simply insert some books to database */
@@ -80,7 +85,7 @@ func TestIncBookStock(t *testing.T) {
 
 	var bookList = make([]*database.Book, 0, len(books))
 	for book, i := range books {
-		result := StoreBook(&book)
+		result := server.StoreBook(&book)
 		assert.Equal(t, result.Ok, true)
 		bookIds[result.Payload.(int)] = i
 		bookList = append(bookList, &book)
@@ -95,7 +100,7 @@ func TestIncBookStock(t *testing.T) {
 	type test struct {
 		name string
 		args args
-		want APIResult
+		want database.APIResult
 	}
 	var tests []test
 
@@ -103,7 +108,7 @@ func TestIncBookStock(t *testing.T) {
 	tests = append(tests, test{
 		name: "Invalid book id - Negative",
 		args: args{bookId: -1, deltaStock: 6},
-		want: APIResult{Ok: false},
+		want: database.APIResult{Ok: false},
 	})
 	k := len(books) + 1
 	_, ok := bookIds[k]
@@ -114,7 +119,7 @@ func TestIncBookStock(t *testing.T) {
 	tests = append(tests, test{
 		name: "Invalid book id - Maximum",
 		args: args{bookId: k, deltaStock: 10},
-		want: APIResult{Ok: false},
+		want: database.APIResult{Ok: false},
 	})
 
 	/* corner case: invalid book stock */
@@ -122,17 +127,17 @@ func TestIncBookStock(t *testing.T) {
 	tests = append(tests, test{
 		name: "Decrease book stock",
 		args: args{bookId: lastBook.BookId, deltaStock: -lastBook.Stock},
-		want: APIResult{Ok: true},
+		want: database.APIResult{Ok: true},
 	})
 	tests = append(tests, test{
 		name: "Increase book stock",
 		args: args{bookId: lastBook.BookId, deltaStock: 1},
-		want: APIResult{Ok: true},
+		want: database.APIResult{Ok: true},
 	})
 	tests = append(tests, test{
 		name: "Test for invalid book stock - Negative",
 		args: args{bookId: lastBook.BookId, deltaStock: -2},
-		want: APIResult{Ok: false},
+		want: database.APIResult{Ok: false},
 	})
 
 	/* randomly choose some books to do this operation */
@@ -147,14 +152,14 @@ func TestIncBookStock(t *testing.T) {
 		tests = append(tests, test{
 			name: fmt.Sprintf("Random test %d", i),
 			args: args{bookId: book.BookId, deltaStock: deltaStock},
-			want: APIResult{Ok: expected},
+			want: database.APIResult{Ok: expected},
 		})
 	}
 
 	/* run tests */
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IncBookStock(tt.args.bookId, tt.args.deltaStock); got.Ok != tt.want.Ok {
+			if got := server.IncBookStock(tt.args.bookId, tt.args.deltaStock); got.Ok != tt.want.Ok {
 				t.Errorf("IncBookStock() = %v, want %v", got, tt.want)
 			}
 		})
@@ -167,6 +172,7 @@ func TestIncBookStock(t *testing.T) {
 func TestBulkRegisterBook(t *testing.T) {
 	const numBulkBooks = 1000
 	const numDuplicateBooks = 3
+	server := Server{}
 	database.ResetDatabase()
 
 	/* simply insert some books to database */
@@ -192,18 +198,18 @@ func TestBulkRegisterBook(t *testing.T) {
 	rand.Shuffle(len(bookList1), func(i, j int) {
 		bookList1[i], bookList1[j] = bookList1[j], bookList1[i]
 	})
-	assert.Equal(t, StoreBooks(bookList1).Ok, false)
+	assert.Equal(t, server.StoreBooks(bookList1).Ok, false)
 
 	/* make sure that none of the books are inserted */
-	queryResult1 := QueryBooks(queries.BookQueryConditions{})
+	queryResult1 := server.QueryBooks(queries.BookQueryConditions{})
 	assert.Equal(t, queryResult1.Ok, true)
 	selectedResults1 := queryResult1.Payload.(queries.BookQueryResults)
 	assert.Equal(t, 0, selectedResults1.Count)
 
 	/* normal batch insert */
 	bookList2 := books.List()
-	assert.Equal(t, StoreBooks(bookList2).Ok, true)
-	queryResult2 := QueryBooks(queries.BookQueryConditions{})
+	assert.Equal(t, server.StoreBooks(bookList2).Ok, true)
+	queryResult2 := server.QueryBooks(queries.BookQueryConditions{})
 	assert.Equal(t, queryResult2.Ok, true)
 	selectedResults2 := queryResult2.Payload.(queries.BookQueryResults)
 	assert.Equal(t, len(bookList2), selectedResults2.Count)
@@ -216,6 +222,9 @@ func TestBulkRegisterBook(t *testing.T) {
 }
 
 func TestModifyBookInfo(t *testing.T) {
+	server := Server{}
+	database.ResetDatabase()
+
 	/* simply insert some books to database */
 	books := make(utils.BookSet)
 	for i := 0; i < 100; i++ {
@@ -223,7 +232,7 @@ func TestModifyBookInfo(t *testing.T) {
 	}
 	bookList := books.List()
 	for _, book := range bookList {
-		assert.Equal(t, StoreBook(book).Ok, true)
+		assert.Equal(t, server.StoreBook(book).Ok, true)
 	}
 	/* randomly change books */
 	for _, book := range bookList {
@@ -257,11 +266,11 @@ func TestModifyBookInfo(t *testing.T) {
 		}
 		// insert new book to book set
 		books.Insert(*book)
-		assert.Equal(t, ModifyBookInfo(book).Ok, true)
+		assert.Equal(t, server.ModifyBookInfo(book).Ok, true)
 		book.Stock = oldStock
 	}
 	// compare results
-	queryResult := QueryBooks(queries.BookQueryConditions{})
+	queryResult := server.QueryBooks(queries.BookQueryConditions{})
 	assert.Equal(t, queryResult.Ok, true)
 	selectedResults := queryResult.Payload.(queries.BookQueryResults)
 	assert.Equal(t, len(bookList), selectedResults.Count)
@@ -271,5 +280,59 @@ func TestModifyBookInfo(t *testing.T) {
 	})
 	for i := 0; i < len(bookList); i++ {
 		assert.Equal(t, bookList[i], selectedResults.Results[i])
+	}
+}
+
+func TestRegisterAndShowAndRemoveCard(t *testing.T) {
+	const randomTimes = 20
+	server := Server{}
+	database.ResetDatabase()
+
+	/* simply insert N cards */
+	library := utils.CreateLibrary(1, 100, 0, &server)
+
+	/* duplicate create */
+	duplicateCard := *library.Cards[rand.Intn(len(library.Cards))]
+	duplicateCard.CardId = 0
+	assert.Equal(t, server.RegisterCard(&duplicateCard).Ok, false)
+
+	/* delete a card that has some un-returned books */
+	delPos := rand.Intn(library.NumCards())
+	delCard := library.Cards[delPos]
+	borrow := database.Borrow{
+		BookId: library.Books[0].BookId,
+		CardId: delCard.CardId,
+	}
+	assert.Equal(t, server.BorrowBook(borrow).Ok, true)
+	assert.Equal(t, server.RemoveCard(delCard.CardId).Ok, false)
+	assert.Equal(t, server.ReturnBook(borrow).Ok, true)
+	assert.Equal(t, server.RemoveCard(delCard.CardId).Ok, true)
+	/* delete a non-exists card */
+	assert.Equal(t, server.RemoveCard(-1).Ok, false)
+	assert.Equal(t, server.RemoveCard(delCard.CardId).Ok, false)
+	// delete this card from library
+	library.Cards = append(library.Cards[:delPos], library.Cards[delPos+1:]...)
+
+	/* randomly delete some cards */
+	rand.Shuffle(len(library.Cards), func(i, j int) {
+		library.Cards[i], library.Cards[j] = library.Cards[j], library.Cards[i]
+	})
+	for i := 0; i < randomTimes; i++ {
+		dCard := library.Cards[0]
+		assert.Equal(t, server.RemoveCard(dCard.CardId).Ok, true)
+		assert.Equal(t, server.RemoveCard(dCard.CardId).Ok, false)
+		library.Cards = library.Cards[1:]
+	}
+
+	/* check cards */
+	sort.Slice(library.Cards, func(i, j int) bool {
+		return library.Cards[i].CardId < library.Cards[j].CardId
+	})
+	result := server.ShowCards()
+	assert.Equal(t, result.Ok, true)
+	selectedResults := result.Payload.(queries.CardList)
+	assert.Equal(t, len(library.Cards), selectedResults.Count)
+	for i := 0; i < len(library.Cards); i++ {
+		assert.Equal(t, library.Cards[i], selectedResults.Cards[i])
 	}
 }

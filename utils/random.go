@@ -78,6 +78,12 @@ func RandomDepartment() string {
 	return departments[rand.Intn(len(departments))]
 }
 
+func RandomCardType() string {
+	types := []string{"S", "T"}
+	return types[rand.Intn(len(types))]
+
+}
+
 func RandomTime() int64 {
 	return rand.Int63n(timeEnd.Unix()-timeStart.Unix()) + timeStart.Unix()
 }

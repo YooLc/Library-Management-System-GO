@@ -16,6 +16,12 @@ type DatabaseConfig struct {
 	Database string `yaml:"database"`
 }
 
+type APIResult struct {
+	Ok      bool        `json:"ok"`
+	Message string      `json:"message"`
+	Payload interface{} `json:"payload"`
+}
+
 var DB *gorm.DB
 
 func ResetDatabase() {

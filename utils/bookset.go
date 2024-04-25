@@ -46,3 +46,8 @@ func (b BookSet) Remove(val database.Book) bool {
 	delete(b, key)
 	return true
 }
+
+// Size return the size of the set
+func (b BookSet) Size() int {
+	return len(b)
+}
