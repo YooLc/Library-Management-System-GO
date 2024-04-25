@@ -45,7 +45,7 @@ func storeBookHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Store book
-	result := StoreBook(book)
+	result := StoreBook(&book)
 	response(w, result)
 }
 

@@ -36,17 +36,17 @@ type APIResult struct {
 // register a book to database.
 //
 //	Note that:
-//	     (1) book_id should be stored to book after successfully
+//	     (1) BookID should be stored to book after successfully
 //	         completing this operation.
 //	     (2) you should not register this book if the book already
 //	         exists in the library system.
 //
 //	@param book all attributes of the book
-func StoreBook(book database.Book) APIResult {
+func StoreBook(book *database.Book) APIResult {
 	// Store the book
-	// book_id is set via gorm
+	// BookID is set via gorm
 	// the database prevents duplicate book entries by primary key constraint
-	if err := database.DB.Create(&book).Error; err != nil {
+	if err := database.DB.Create(book).Error; err != nil {
 		return APIResult{
 			Ok:      false,
 			Message: "Failed to store book, maybe the book already exists",
@@ -56,7 +56,7 @@ func StoreBook(book database.Book) APIResult {
 	return APIResult{
 		Ok:      true,
 		Message: "Book stored successfully",
-		Payload: book.Book_id,
+		Payload: book.BookId,
 	}
 }
 
@@ -65,14 +65,14 @@ func StoreBook(book database.Book) APIResult {
 //
 // Note that:
 //
-//	(1) you need to check the correctness of book_id
+//	(1) you need to check the correctness of BookID
 //	(2) deltaStock can be negative, but make sure that
 //	    the result of book.stock + deltaStock is not negative!
 //
-// @param bookId book's book_id
+// @param bookId book's BookID
 // @param deltaStock increase count to book's stock, must be greater
 func IncBookStock(bookId int, deltaStock int) APIResult {
-	// Check the correctness of book_id
+	// Check the correctness of BookID
 	book := database.Book{}
 	if err := database.DB.First(&book, bookId).Error; err != nil {
 		return APIResult{
@@ -108,7 +108,7 @@ func IncBookStock(bookId int, deltaStock int) APIResult {
 	}
 }
 
-// StoreBookList
+// StoreBooks
 // batch store books.
 //
 // Note that:
@@ -124,12 +124,12 @@ func IncBookStock(bookId int, deltaStock int) APIResult {
 //	    the risk of SQL injection attack!!!
 //
 // @param books list of books to be stored
-func StoreBookList(books []database.Book) APIResult {
+func StoreBooks(books []*database.Book) APIResult {
 	// Batch store books via transaction in gorm
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Add creation of each book to the transaction
 		for _, book := range books {
-			if err := tx.Create(&book).Error; err != nil {
+			if err := tx.Create(book).Error; err != nil {
 				return err
 			}
 		}
@@ -176,13 +176,13 @@ func RemoveBook(book database.Book) APIResult {
 }
 
 // ModifyBookInfo
-// modify a book's information by book_id.book_id.
+// modify a book's information by BookID.BookID.
 //
-// Note that you should not modify its book_id and stock!
+// Note that you should not modify its BookID and stock!
 //
 // @param book the book to be modified
 func ModifyBookInfo(book database.Book) APIResult {
-	// Todo: Avoid modifying book_id and stock
+	// Todo: Avoid modifying BookID and stock
 
 	// Modify the book info
 	if err := database.DB.Model(&book).Updates(book); err != nil {
@@ -199,7 +199,7 @@ func ModifyBookInfo(book database.Book) APIResult {
 	}
 }
 
-// QueryBook
+// QueryBooks
 // Note that:
 //
 //	(1) you should let the DBMS filter records
@@ -207,7 +207,7 @@ func ModifyBookInfo(book database.Book) APIResult {
 //	    filter records in your API.
 //	(2) when binding params to SQL, you also need to avoid
 //	    the risk of SQL injection attack.
-//	(3) [*] if all else is equal, sort by book_id in
+//	(3) [*] if all else is equal, sort by BookID in
 //	    ascending order!
 //
 // @param conditions query conditions
@@ -215,8 +215,48 @@ func ModifyBookInfo(book database.Book) APIResult {
 // @return query results should be returned by ApiResult.payload
 //
 //	and should be an instance of {@link queries.BookQueryResults}
-func queryBook(conditions queries.BookQueryConditions) APIResult {
-	return APIResult{}
+func QueryBooks(conditions queries.BookQueryConditions) APIResult {
+	// Query books
+	books := queries.BookQueryResults{}
+
+	query := database.DB.Model(&database.Book{})
+	if conditions.Category != "" {
+		query = query.Where("category like ?", "%"+conditions.Category+"%")
+	}
+	if conditions.Title != "" {
+		query = query.Where("title like ?", "%"+conditions.Title+"%")
+	}
+	if conditions.Author != "" {
+		query = query.Where("author like ?", "%"+conditions.Author+"%")
+	}
+	if conditions.MinPublishYear != 0 {
+		query = query.Where("publish_year >= ?", conditions.MinPublishYear)
+	}
+	if conditions.MaxPublishYear != 0 {
+		query = query.Where("publish_year <= ?", conditions.MaxPublishYear)
+	}
+	if conditions.MinPrice != 0 {
+		query = query.Where("price >= ?", conditions.MinPrice)
+	}
+	if conditions.MaxPrice != 0 {
+		query = query.Where("price <= ?", conditions.MaxPrice)
+	}
+	// TODO: handle order in conditions
+	result := query.Order("book_id asc").Scan(&books.Results)
+
+	if result.Error != nil {
+		return APIResult{
+			Ok:      false,
+			Message: "Failed to query books",
+			Payload: result.Error,
+		}
+	}
+	books.Count = int(result.RowsAffected)
+	return APIResult{
+		Ok:      true,
+		Message: "Books queried successfully",
+		Payload: books,
+	}
 }
 
 /* Interface for borrow & return books */
@@ -231,18 +271,21 @@ func queryBook(conditions queries.BookQueryConditions) APIResult {
 // @param borrow information, include borrower &
 // book's id & time
 func BorrowBook(borrow database.Borrow) APIResult {
-	borrow.Borrow_time = time.Now().UnixMilli()
+	borrow.BorrowTime = time.Now().UnixMilli()
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Check if there are enough books in stock
 		var stock int
-		tx.Model(&database.Book{}).Select("stock").Where("book_id = ?", borrow.Book_id).Row().Scan(&stock)
+		err := tx.Model(&database.Book{}).Select("stock").Where("book_id = ?", borrow.BookId).Row().Scan(&stock)
+		if err != nil {
+			return err
+		}
 		if stock <= 0 {
 			return fmt.Errorf("book out of stock")
 		}
 
 		// Check if the user has not borrowed the book or has returned it
 		var count int64
-		tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.Card_id, borrow.Book_id).Count(&count)
+		tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).Count(&count)
 		if count > 0 { // There is a borrow record without return time
 			return fmt.Errorf("user has not returned the book")
 		}
@@ -253,7 +296,7 @@ func BorrowBook(borrow database.Borrow) APIResult {
 			return err
 		}
 		// Update the stock of the book
-		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.Book_id).Update("stock", gorm.Expr("stock - 1")).Error; err != nil {
+		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.BookId).Update("stock", gorm.Expr("stock - 1")).Error; err != nil {
 			return err
 		}
 
@@ -286,12 +329,12 @@ func ReturnBook(borrow database.Borrow) APIResult {
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// return_time = 0 because a book can be borrowed
 		// multiple times by the same card (but not the same time)
-		if err := tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.Card_id, borrow.Book_id).Update("return_time", time.Now().UnixMilli()).Error; err != nil {
+		if err := tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).Update("return_time", time.Now().UnixMilli()).Error; err != nil {
 			return err
 		}
 
 		// Update the stock of the book
-		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.Book_id).Update("stock", gorm.Expr("stock + 1")).Error; err != nil {
+		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.BookId).Update("stock", gorm.Expr("stock + 1")).Error; err != nil {
 			return err
 		}
 		return nil
@@ -314,15 +357,15 @@ func ReturnBook(borrow database.Borrow) APIResult {
 
 // ShowBorrowHistories
 // list all borrow histories for a specific card.
-// the returned records should be sorted by borrow_time DESC, book_id ASC
+// the returned records should be sorted by borrowTime DESC, bookId ASC
 //
 // @param cardId show which card's borrow history
 // @return query results should be returned by ApiResult.payload
 //
 //	and should be an instance of {@link queries.BorrowHistories}
-func ShowBorrowHistories(card_id int) APIResult {
+func ShowBorrowHistories(cardId int) APIResult {
 	history := queries.BorrowHistories{}
-	err := database.DB.Model(&database.Borrow{}).Joins("natural join book").Where("borrows.card_id = ?", card_id).Scan(&history.Items)
+	err := database.DB.Model(&database.Borrow{}).Joins("natural join book").Where("borrows.CardId = ?", cardId).Scan(&history.Items)
 	if err != nil {
 		return APIResult{
 			Ok:      false,
@@ -347,7 +390,24 @@ func ShowBorrowHistories(card_id int) APIResult {
 //
 // @param card all attributes of the card
 func RegisterCard(card database.Card) APIResult {
-	return APIResult{}
+	// Check if the card already exists
+	var count int64
+	database.DB.Model(&database.Card{}).Where("card_id = ?", card.CardId).Count(&count)
+	if count > 0 {
+		return APIResult{
+			Ok:      false,
+			Message: "This card already exists",
+			Payload: nil,
+		}
+	}
+
+	// Create a new borrow card
+	database.DB.Create(&card)
+	return APIResult{
+		Ok:      true,
+		Message: "Card registered successfully",
+		Payload: card.CardId,
+	}
 }
 
 // RemoveCard
