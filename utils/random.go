@@ -2,6 +2,7 @@ package utils
 
 import (
 	"library-management-system/database"
+	"library-management-system/server/queries"
 	"math/rand"
 	"time"
 )
@@ -86,4 +87,12 @@ func RandomCardType() string {
 
 func RandomTime() int64 {
 	return rand.Int63n(timeEnd.UnixMilli()-timeStart.UnixMilli()) + timeStart.UnixMilli()
+}
+
+func RandomSortColumn() queries.SortColumn {
+	return queries.SortColumns[rand.Intn(len(queries.SortColumns))]
+}
+
+func RandomSortOrder() queries.Order {
+	return queries.SortOrders[rand.Intn(len(queries.SortOrders))]
 }

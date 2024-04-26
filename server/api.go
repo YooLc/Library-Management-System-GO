@@ -251,6 +251,9 @@ func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.API
 	if conditions.Title != "" {
 		query = query.Where("title like ?", "%"+conditions.Title+"%")
 	}
+	if conditions.Press != "" {
+		query = query.Where("press like ?", "%"+conditions.Press+"%")
+	}
 	if conditions.Author != "" {
 		query = query.Where("author like ?", "%"+conditions.Author+"%")
 	}
@@ -266,8 +269,19 @@ func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.API
 	if conditions.MaxPrice != 0 {
 		query = query.Where("price <= ?", conditions.MaxPrice)
 	}
-	// TODO: handle order in conditions
-	result := query.Order("book_id asc").Scan(&books.Results)
+	sortBy := "book_id"
+	sortOrder := "asc"
+	if conditions.SortBy != "" {
+		sortBy = string(conditions.SortBy)
+	}
+	if conditions.SortOrder != "" {
+		sortOrder = string(conditions.SortOrder)
+	}
+	sortCondition := fmt.Sprintf("%v %v", sortBy, sortOrder)
+	if !(conditions.SortBy == queries.BookId && conditions.SortOrder == queries.Desc) {
+		sortCondition += ", book_id asc"
+	}
+	result := query.Order(sortCondition).Scan(&books.Results)
 
 	if result.Error != nil {
 		return database.APIResult{

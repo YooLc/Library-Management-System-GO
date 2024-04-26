@@ -9,7 +9,9 @@ import (
 	"library-management-system/utils"
 	"math/rand"
 	"os"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -320,9 +322,11 @@ func TestRemoveBook(t *testing.T) {
 	assert.Equal(t, server.RemoveBook(-1).Ok, false)
 
 	/* remove a book that someone has not returned yet */
-	borrow := database.Borrow{BookId: library.Books[0].BookId, CardId: library.Cards[0].CardId}
+	borrow := database.CreateBorrow(library.Cards[0].CardId, library.Books[0].BookId)
+	borrow.ResetBorrowTime()
 	assert.Equal(t, server.BorrowBook(borrow).Ok, true)
 	assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, false)
+	borrow.ResetReturnTime()
 	assert.Equal(t, server.ReturnBook(borrow).Ok, true)
 	assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, true)
 
@@ -416,7 +420,91 @@ func TestModifyBookInfo(t *testing.T) {
 }
 
 func TestQueryBook(t *testing.T) {
+	server := Server{}
+	database.ResetDatabase()
 
+	/* simply insert some books to database */
+	my := utils.CreateLibrary(100, 1, 0, &server)
+	/* generate single query condition */
+	queryConditions := make([]queries.BookQueryConditions, 0)
+	for i := 0; i < 15; i++ {
+		queryConditions = append(queryConditions, queries.BookQueryConditions{})
+	}
+	queryConditions[0].Category = utils.RandomCategory()
+	queryConditions[1].Title = utils.RandomTitle()
+	queryConditions[2].Press = "Press" // test fuzzy matching
+	queryConditions[3].Press = utils.RandomPress()
+	queryConditions[4].MinPrice = utils.RandomPrice()
+	queryConditions[5].MaxPrice = utils.RandomPrice()
+	queryConditions[6].MinPrice = 20.24
+	queryConditions[6].MaxPrice = 52.42
+	queryConditions[7].MinPublishYear = 2008
+	queryConditions[8].MaxPublishYear = 2020
+	{
+		minY := rand.Intn(15) + 2000
+		maxY := max(minY, rand.Intn(17)+2007)
+		queryConditions[9].MinPublishYear = minY
+		queryConditions[9].MaxPublishYear = maxY
+	}
+	queryConditions[10].Author = "o" // test fuzzy matching
+	queryConditions[11].Author = utils.RandomAuthor()
+	queryConditions[12].SortBy = queries.Price
+	queryConditions[12].SortOrder = queries.Asc
+	queryConditions[13].SortBy = queries.Price
+	queryConditions[13].SortOrder = queries.Desc
+	queryConditions[14].SortBy = queries.PublishYear
+	queryConditions[14].SortOrder = queries.Desc
+	/* generate multi query conditions */
+	for i := 0; i < 45; i++ {
+		c := queries.BookQueryConditions{}
+		mask := rand.Intn(32)
+		selected := 0
+		if (mask & 1) > 0 {
+			c.Press = utils.RandomPress()
+			selected++
+		}
+		if (mask & 2) > 0 {
+			c.Category = utils.RandomCategory()
+			selected++
+		}
+		if (mask & 4) > 0 {
+			c.Author = utils.RandomAuthor()
+			selected++
+		}
+		// Randomly select year
+		if rand.Intn(2+selected) == 1 {
+			minY := rand.Intn(15) + 2000
+			maxY := max(rand.Intn(17)+2007, minY+7)
+			c.MinPublishYear = minY
+			c.MaxPublishYear = maxY
+			selected++
+		}
+		// Randomly select price
+		if rand.Intn(3+selected) == 1 {
+			minP := utils.RandomPrice()
+			maxP := max(utils.RandomPrice(), minP+16.66)
+			c.MinPrice = minP
+			c.MaxPrice = maxP
+		}
+		// Randomly choose one column to sort
+		if rand.Intn(4) != 1 {
+			c.SortBy = utils.RandomSortColumn()
+			c.SortOrder = utils.RandomSortOrder()
+		}
+		queryConditions = append(queryConditions, c)
+	}
+
+	// Loop testing
+	for _, queryCondition := range queryConditions {
+		queryResult := server.QueryBooks(queryCondition)
+		assert.Equal(t, queryResult.Ok, true)
+		bookResults := queryResult.Payload.(queries.BookQueryResults)
+		expectedResults := verifyQueryResult(my.Books, queryCondition)
+		assert.Equal(t, len(expectedResults), bookResults.Count)
+		for i := 0; i < len(expectedResults); i++ {
+			assert.Equal(t, expectedResults[i], bookResults.Results[i])
+		}
+	}
 }
 
 func TestBorrowAndReturnBook(t *testing.T) {
@@ -602,12 +690,11 @@ func TestRegisterAndShowAndRemoveCard(t *testing.T) {
 	/* delete a card that has some un-returned books */
 	delPos := rand.Intn(library.NumCards())
 	delCard := library.Cards[delPos]
-	borrow := database.Borrow{
-		BookId: library.Books[0].BookId,
-		CardId: delCard.CardId,
-	}
+	borrow := database.CreateBorrow(delCard.CardId, library.Books[0].BookId)
+	borrow.ResetBorrowTime()
 	assert.Equal(t, server.BorrowBook(borrow).Ok, true)
 	assert.Equal(t, server.RemoveCard(delCard.CardId).Ok, false)
+	borrow.ResetReturnTime()
 	assert.Equal(t, server.ReturnBook(borrow).Ok, true)
 	assert.Equal(t, server.RemoveCard(delCard.CardId).Ok, true)
 	/* delete a non-exists card */
@@ -640,6 +727,72 @@ func TestRegisterAndShowAndRemoveCard(t *testing.T) {
 	}
 }
 
-//func verifyQueryResult(books []*database.Book, conditions queries.BookQueryConditions) {
-//
-//}
+func filter(arr []*database.Book, cond func(*database.Book) bool) []*database.Book {
+	result := []*database.Book{}
+	for _, v := range arr {
+		if cond(v) {
+			result = append(result, v)
+		}
+	}
+	return result
+}
+
+func verifyQueryResult(books []*database.Book, conditions queries.BookQueryConditions) []*database.Book {
+	fmt.Printf("%v\n", conditions)
+	var result []*database.Book
+	for _, book := range books {
+		result = append(result, book)
+	}
+	if conditions.Category != "" {
+		result = filter(books, func(book *database.Book) bool {
+			return book.Category == conditions.Category
+		})
+	}
+	if conditions.Title != "" {
+		result = filter(result, func(book *database.Book) bool {
+			return strings.Contains(book.Title, conditions.Title)
+		})
+	}
+	if conditions.Press != "" {
+		result = filter(result, func(book *database.Book) bool {
+			return strings.Contains(book.Press, conditions.Press)
+		})
+	}
+	if conditions.MinPublishYear != 0 {
+		result = filter(result, func(book *database.Book) bool {
+			return book.PublishYear >= conditions.MinPublishYear
+		})
+	}
+	if conditions.MaxPublishYear != 0 {
+		result = filter(result, func(book *database.Book) bool {
+			return book.PublishYear <= conditions.MaxPublishYear
+		})
+	}
+	if conditions.Author != "" {
+		result = filter(result, func(book *database.Book) bool {
+			return strings.Contains(book.Author, conditions.Author)
+		})
+	}
+	if conditions.MinPrice != 0 {
+		result = filter(result, func(book *database.Book) bool {
+			return book.Price >= conditions.MinPrice
+		})
+	}
+	if conditions.MaxPrice != 0 {
+		result = filter(result, func(book *database.Book) bool {
+			return book.Price <= conditions.MaxPrice
+		})
+	}
+
+	sortBy := queries.BookId
+	if conditions.SortBy != "" {
+		sortBy = conditions.SortBy
+	}
+	cmp := queries.BookComparator(queries.GetComparator(sortBy))
+	if conditions.SortOrder == queries.Desc {
+		cmp = cmp.Reverse()
+	}
+	cmp = cmp.ThenByIdAsc()
+	slices.SortFunc(result, cmp)
+	return result
+}
