@@ -2,11 +2,9 @@ package server
 
 import (
 	"fmt"
+	"gorm.io/gorm"
 	"library-management-system/database"
 	"library-management-system/server/queries"
-	"time"
-
-	"gorm.io/gorm"
 )
 
 type Server struct{}
@@ -298,11 +296,15 @@ func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.API
 // @param borrow information, include borrower &
 // book's id & time
 func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
-	borrow.BorrowTime = time.Now().UnixMilli()
+	//borrow.BorrowTime = time.Now().UnixMilli()
+	borrow.ReturnTime = 0
+	// Use the time from borrow.BorrowTime
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Check if there are enough books in stock
 		var stock int
-		err := tx.Model(&database.Book{}).Select("stock").Where("book_id = ?", borrow.BookId).Row().Scan(&stock)
+		err := tx.Model(&database.Book{}).Select("stock").
+			Where("book_id = ?", borrow.BookId).Row().
+			Scan(&stock)
 		if err != nil {
 			return err
 		}
@@ -312,7 +314,9 @@ func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 
 		// Check if the user has not borrowed the book or has returned it
 		var count int64
-		tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).Count(&count)
+		tx.Model(&database.Borrow{}).
+			Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).
+			Count(&count)
 		if count > 0 { // There is a borrow record without return time
 			return fmt.Errorf("user has not returned the book")
 		}
@@ -323,7 +327,9 @@ func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 			return err
 		}
 		// Update the stock of the book
-		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.BookId).Update("stock", gorm.Expr("stock - 1")).Error; err != nil {
+		if err := tx.Model(&database.Book{}).
+			Where("book_id = ?", borrow.BookId).
+			Update("stock", gorm.Expr("stock - 1")).Error; err != nil {
 			return err
 		}
 
@@ -353,15 +359,29 @@ func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 // @param borrow
 // borrow information, include borrower & book's id & return time
 func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
+	if borrow.ReturnTime <= borrow.BorrowTime || borrow.BorrowTime == 0 {
+		return database.APIResult{
+			Ok:      false,
+			Message: "Return time should be later than borrow time",
+			Payload: nil,
+		}
+	}
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// return_time = 0 because a book can be borrowed
 		// multiple times by the same card (but not the same time)
-		if err := tx.Model(&database.Borrow{}).Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).Update("return_time", time.Now().UnixMilli()).Error; err != nil {
+		result := tx.Model(&database.Borrow{}).
+			Where("card_id = ? and book_id = ? and return_time = 0", borrow.CardId, borrow.BookId).
+			Update("return_time", borrow.ReturnTime)
+		if err := result.Error; err != nil {
 			return err
+		} else if result.RowsAffected == 0 {
+			return fmt.Errorf("no borrow record found, maybe the user have returned the book or the book is not borrowed")
 		}
 
 		// Update the stock of the book
-		if err := tx.Model(&database.Book{}).Where("book_id = ?", borrow.BookId).Update("stock", gorm.Expr("stock + 1")).Error; err != nil {
+		if err := tx.Model(&database.Book{}).
+			Where("book_id = ?", borrow.BookId).
+			Update("stock", gorm.Expr("stock + 1")).Error; err != nil {
 			return err
 		}
 		return nil
@@ -392,12 +412,16 @@ func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
 //	and should be an instance of {@link queries.BorrowHistories}
 func (s *Server) ShowBorrowHistories(cardId int) database.APIResult {
 	history := queries.BorrowHistories{}
-	err := database.DB.Model(&database.Borrow{}).Joins("natural join book").Where("borrows.CardId = ?", cardId).Scan(&history.Items)
+	err := database.DB.Model(&database.Borrow{}).
+		Joins("natural join books").
+		Where("borrows.card_id = ?", cardId).
+		Order("borrow_time desc, book_id asc").
+		Scan(&history.Items).Error
 	if err != nil {
 		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to fetch borrow histories",
-			Payload: nil,
+			Payload: err,
 		}
 	}
 	history.Count = len(history.Items)

@@ -2,6 +2,8 @@ package server
 
 import (
 	"fmt"
+	"github.com/go-playground/assert/v2"
+	"gopkg.in/yaml.v3"
 	"library-management-system/database"
 	"library-management-system/server/queries"
 	"library-management-system/utils"
@@ -9,9 +11,6 @@ import (
 	"os"
 	"sort"
 	"testing"
-
-	"github.com/go-playground/assert/v2"
-	"gopkg.in/yaml.v3"
 )
 
 type AppConfig struct {
@@ -416,6 +415,177 @@ func TestModifyBookInfo(t *testing.T) {
 	}
 }
 
+func TestQueryBook(t *testing.T) {
+
+}
+
+func TestBorrowAndReturnBook(t *testing.T) {
+	server := Server{}
+	database.ResetDatabase()
+
+	// Insert some books & cards & borrow histories to database
+	my := utils.CreateLibrary(50, 50, 100, &server)
+
+	// Borrow a non-exists book
+	bookIds := make(map[int]bool)
+	for _, book := range my.Books {
+		bookIds[book.BookId] = true
+	}
+	stockMap := make(map[int]int)
+	for _, book := range my.Books {
+		stockMap[book.BookId] = book.Stock
+	}
+	nbId := rand.Intn(200)
+	for bookIds[nbId] {
+		nbId = rand.Intn(200)
+	}
+	cardIds := make(map[int]bool)
+	for _, card := range my.Cards {
+		cardIds[card.CardId] = true
+	}
+	nb := database.CreateBorrow(my.Cards[0].CardId, nbId)
+	nb.ResetBorrowTime()
+	nb.ResetReturnTime()
+	assert.Equal(t, server.BorrowBook(nb).Ok, false)
+	assert.Equal(t, server.ReturnBook(nb).Ok, false)
+
+	// Card not exists
+	ncId := rand.Intn(200)
+	for cardIds[ncId] {
+		ncId = rand.Intn(200)
+	}
+	nc := database.CreateBorrow(ncId, my.Books[0].BookId)
+	nc.ResetBorrowTime()
+	nc.ResetReturnTime()
+	assert.Equal(t, server.BorrowBook(nc).Ok, false)
+	assert.Equal(t, server.ReturnBook(nc).Ok, false)
+
+	// Book & card both not exist
+	nbc := database.CreateBorrow(ncId, nbId)
+	nbc.ResetBorrowTime()
+	assert.Equal(t, server.BorrowBook(nbc).Ok, false)
+
+	// Borrow a book
+	b0 := my.Books[rand.Intn(len(my.Books))]
+	assert.Equal(t, b0.Stock > 0, true)
+	c0 := my.Cards[rand.Intn(len(my.Cards))]
+	r0 := database.CreateBorrow(c0.CardId, b0.BookId)
+	r0.ResetBorrowTime()
+	r0.ResetReturnTime()
+	assert.Equal(t, server.ReturnBook(r0).Ok, false)
+	assert.Equal(t, server.BorrowBook(r0).Ok, true)
+
+	// Borrow it again
+	r1 := database.CreateBorrow(c0.CardId, b0.BookId)
+	r1.ResetBorrowTime()
+	assert.Equal(t, server.BorrowBook(r1).Ok, false)
+
+	// Return this book
+	// Corner case, for return_time > borrow_time
+	nt := database.CreateBorrow(c0.CardId, b0.BookId)
+	nt.ReturnTime = 666
+	assert.Equal(t, server.ReturnBook(nt).Ok, false)
+	nt.ReturnTime = r0.BorrowTime
+	assert.Equal(t, server.ReturnBook(nt).Ok, false)
+
+	// Normal case
+	r0.ResetReturnTime()
+	assert.Equal(t, server.ReturnBook(r0).Ok, true)
+	my.Borrows = append(my.Borrows, &r0) // Add to borrow list after operation
+
+	// Return this book again
+	r1.ResetReturnTime()
+	assert.Equal(t, server.ReturnBook(r1).Ok, false)
+
+	// Borrow & return this book
+	r2 := database.CreateBorrow(c0.CardId, b0.BookId)
+	r2.ResetBorrowTime()
+	assert.Equal(t, server.BorrowBook(r2).Ok, true)
+	r2.ResetReturnTime()
+	assert.Equal(t, server.ReturnBook(r2).Ok, true)
+	my.Borrows = append(my.Borrows, &r2) // Add to borrow list after operation
+
+	// Try to borrow a zero-stock book
+	assert.Equal(t, server.IncBookStock(b0.BookId, -b0.Stock).Ok, true)
+	r3 := database.CreateBorrow(c0.CardId, b0.BookId)
+	r3.ResetBorrowTime()
+	assert.Equal(t, server.BorrowBook(r3).Ok, false)
+	stockMap[b0.BookId] = 0 // Now b0.stock == 0
+
+	// Randomly borrow & return books
+	var borrowList []*database.Borrow
+	type borrowRecord struct {
+		bookId int
+		CardId int
+	}
+	borrowStatus := make(map[borrowRecord]bool)
+	for i := 0; i < 1000; i++ {
+		if rand.Intn(2) == 0 && len(borrowList) > 0 { // Do return book
+			k := rand.Intn(len(borrowList))
+			r := borrowList[k]
+			r.ResetReturnTime()
+			assert.Equal(t, server.ReturnBook(*r).Ok, true)
+			borrowList = append(borrowList[:k], borrowList[k+1:]...)
+			delete(borrowStatus, borrowRecord{r.BookId, r.CardId})
+			my.Borrows = append(my.Borrows, r) // Add to borrow list after operation
+			stockMap[r.BookId]++
+		} else { // Do borrow book
+			b := my.Books[rand.Intn(len(my.Books))]
+			c := my.Cards[rand.Intn(len(my.Cards))]
+			r := database.CreateBorrow(c.CardId, b.BookId)
+			r.ResetBorrowTime()
+			sp := borrowRecord{r.BookId, r.CardId}
+			if borrowStatus[sp] || stockMap[r.BookId] == 0 {
+				assert.Equal(t, server.BorrowBook(r).Ok, false)
+			} else {
+				assert.Equal(t, server.BorrowBook(r).Ok, true)
+				borrowStatus[sp] = true
+				borrowList = append(borrowList, &r)
+				stockMap[r.BookId]--
+			}
+		}
+	}
+	// Add un-returned books to borrow histories
+	my.Borrows = append(my.Borrows, borrowList...)
+
+	// Compare borrow histories
+	bookMap := make(map[int]*database.Book)
+	for _, book := range my.Books {
+		bookMap[book.BookId] = book
+	}
+	// Card_id --> borrow_items
+	expectedBorrowMap := make(map[int][]*database.Borrow)
+	for _, borrow := range my.Borrows {
+		item := borrow
+		if _, ok := expectedBorrowMap[borrow.CardId]; !ok {
+			expectedBorrowMap[borrow.CardId] = []*database.Borrow{}
+		}
+		expectedBorrowMap[borrow.CardId] = append(expectedBorrowMap[borrow.CardId], item)
+	}
+	for _, list := range expectedBorrowMap {
+		sort.Slice(list, func(i, j int) bool {
+			if list[i].BorrowTime == list[j].BorrowTime {
+				return list[i].BookId < list[j].BookId
+			}
+			return list[i].BorrowTime > list[j].BorrowTime
+		})
+	}
+	for _, card := range my.Cards {
+		result := server.ShowBorrowHistories(card.CardId)
+		assert.Equal(t, result.Ok, true)
+		histories := result.Payload.(queries.BorrowHistories).Items
+		expectedList := expectedBorrowMap[card.CardId]
+		assert.Equal(t, len(expectedList), len(histories))
+		for i := 0; i < len(expectedList); i++ {
+			assert.Equal(t, expectedList[i], histories[i])
+		}
+	}
+}
+
+func TestParallelBorrowBook(t *testing.T) {
+
+}
+
 func TestRegisterAndShowAndRemoveCard(t *testing.T) {
 	const randomTimes = 20
 	server := Server{}
@@ -469,3 +639,7 @@ func TestRegisterAndShowAndRemoveCard(t *testing.T) {
 		assert.Equal(t, library.Cards[i], selectedResults.Cards[i])
 	}
 }
+
+//func verifyQueryResult(books []*database.Book, conditions queries.BookQueryConditions) {
+//
+//}

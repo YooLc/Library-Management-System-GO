@@ -1,5 +1,10 @@
 package database
 
+import (
+	"fmt"
+	"time"
+)
+
 type BookKey struct {
 	Category    string // `json:"category" gorm:"size:63;not null;uniqueIndex:idx_book"`
 	Title       string // `json:"title" gorm:"size:63;not null;uniqueIndex:idx_book"`
@@ -33,4 +38,32 @@ type Borrow struct {
 	BookId     int   `gorm:"primaryKey"`
 	BorrowTime int64 `gorm:"primaryKey;not null"`
 	ReturnTime int64 `gorm:"default:0"`
+}
+
+func (b *Borrow) ResetBorrowTime() {
+	b.BorrowTime = time.Now().UnixMilli()
+}
+func (b *Borrow) ResetReturnTime() {
+	b.ReturnTime = time.Now().UnixMilli()
+}
+func CreateBorrow(cardId, bookId int) Borrow {
+	return Borrow{
+		CardId:     cardId,
+		BookId:     bookId,
+		BorrowTime: time.Now().UnixMilli(),
+		ReturnTime: 0,
+	}
+}
+
+func (b *Book) String() string {
+	return fmt.Sprintf("Book{BookId: %v, Category: %v, Title: %v, Press: %v, PublishYear: %v, Author: %v, Price: %v, Stock: %v}",
+		b.BookId, b.Category, b.Title, b.Press, b.PublishYear, b.Author, b.Price, b.Stock)
+}
+func (c *Card) String() string {
+	return fmt.Sprintf("Card{CardId: %v, Name: %v, Department: %v, Type: %v}",
+		c.CardId, c.Name, c.Department, c.Type)
+}
+func (b *Borrow) String() string {
+	return fmt.Sprintf("Borrow{CardId: %v, BookId: %v, BorrowTime: %v, ReturnTime: %v}",
+		b.CardId, b.BookId, b.BorrowTime, b.ReturnTime)
 }

@@ -85,5 +85,5 @@ func RandomCardType() string {
 }
 
 func RandomTime() int64 {
-	return rand.Int63n(timeEnd.Unix()-timeStart.Unix()) + timeStart.Unix()
+	return rand.Int63n(timeEnd.UnixMilli()-timeStart.UnixMilli()) + timeStart.UnixMilli()
 }

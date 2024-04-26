@@ -11,7 +11,7 @@ import (
 type Library struct {
 	Books   []*database.Book
 	Cards   []*database.Card
-	Borrows []database.Borrow
+	Borrows []*database.Borrow
 }
 
 func CreateLibrary(nBooks int, nCards int, nBorrows int, server ServerInterface) Library {
@@ -35,7 +35,7 @@ func CreateLibrary(nBooks int, nCards int, nBorrows int, server ServerInterface)
 	}
 
 	/* create histories */
-	borrows := make([]database.Borrow, 0)
+	borrows := make([]*database.Borrow, 0)
 	timeStamps := make([]int64, 0)
 	for i := 0; i < nBorrows*2; i++ {
 		timeStamps = append(timeStamps, RandomTime())
@@ -59,7 +59,7 @@ func CreateLibrary(nBooks int, nCards int, nBorrows int, server ServerInterface)
 		}
 		assert.Equal(nil, server.BorrowBook(borrow).Ok, true)
 		assert.Equal(nil, server.ReturnBook(borrow).Ok, true)
-		borrows = append(borrows, borrow)
+		borrows = append(borrows, &borrow)
 		count++
 	}
 	return Library{
