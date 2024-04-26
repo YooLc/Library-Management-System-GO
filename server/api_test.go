@@ -301,6 +301,49 @@ func TestBulkRegisterBook(t *testing.T) {
 	}
 }
 
+func TestRemoveBook(t *testing.T) {
+	server := Server{}
+	database.ResetDatabase()
+
+	/* simply insert some data to database */
+	library := utils.CreateLibrary(100, 1, 0, &server)
+	/* remove a non-exist book */
+	assert.Equal(t, server.RemoveBook(-1).Ok, false)
+
+	/* remove a book that someone has not returned yet */
+	borrow := database.Borrow{BookId: library.Books[0].BookId, CardId: library.Cards[0].CardId}
+	assert.Equal(t, server.BorrowBook(borrow).Ok, true)
+	assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, false)
+	assert.Equal(t, server.ReturnBook(borrow).Ok, true)
+	assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, true)
+
+	/* remove a non-exist book */
+	assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, false)
+	library.Books = library.Books[1:]
+
+	/* randomly choose nRemove books to remove */
+	nRemove := rand.Intn(40) + 10
+	for i := 0; i < nRemove; i++ {
+		assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, true)
+		/* remove a non-exist book */
+		assert.Equal(t, server.RemoveBook(library.Books[0].BookId).Ok, false)
+		library.Books = library.Books[1:]
+	}
+
+	/* compare results */
+	queryResult1 := server.QueryBooks(queries.BookQueryConditions{})
+	assert.Equal(t, queryResult1.Ok, true)
+	selectedResults1 := queryResult1.Payload.(queries.BookQueryResults)
+	assert.Equal(t, len(library.Books), selectedResults1.Count)
+
+	sort.Slice(library.Books, func(i, j int) bool {
+		return library.Books[i].BookId < library.Books[j].BookId
+	})
+	for i := 0; i < len(library.Books); i++ {
+		assert.Equal(t, library.Books[i], selectedResults1.Results[i])
+	}
+}
+
 func TestModifyBookInfo(t *testing.T) {
 	server := Server{}
 	database.ResetDatabase()

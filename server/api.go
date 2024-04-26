@@ -158,17 +158,34 @@ func (s *Server) StoreBooks(books []*database.Book) database.APIResult {
 //	the book should not be removed!
 //
 //	@param bookId the book to be removed
-func (s *Server) RemoveBook(book database.Book) database.APIResult {
+func (s *Server) RemoveBook(bookId int) database.APIResult {
 	// Check if someone has not returned this book
+	var count int64
+	database.DB.Model(&database.Borrow{}).Where("book_id = ? and return_time = 0", bookId).Count(&count)
+	if count > 0 {
+		return database.APIResult{
+			Ok:      false,
+			Message: "This book has some un-returned copies",
+			Payload: nil,
+		}
+	}
 
 	// Remove the book
-	if err := database.DB.Delete(&book).Error; err != nil {
+	result := database.DB.Delete(&database.Book{}, bookId)
+	if result.Error != nil {
 		return database.APIResult{
 			Ok:      false,
 			Message: "Failed to remove book",
-			Payload: err,
+			Payload: result.Error,
+		}
+	} else if result.RowsAffected == 0 { // Delete will succeed even if the book does not exist
+		return database.APIResult{
+			Ok:      false,
+			Message: "This book does not exist, maybe it was already removed",
+			Payload: nil,
 		}
 	}
+
 	return database.APIResult{
 		Ok:      true,
 		Message: "Book removed successfully",
