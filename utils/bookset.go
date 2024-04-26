@@ -21,6 +21,14 @@ func (b BookSet) Insert(val database.Book) {
 	}
 }
 
+// InsertPtr of a book into the map
+func (b BookSet) InsertPtr(val *database.Book) {
+	key := getKey(*val)
+	if !b.Contains(*val) {
+		b[key] = val
+	}
+}
+
 // List return a list of books
 func (b BookSet) List() []*database.Book {
 	var list []*database.Book
