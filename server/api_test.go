@@ -219,6 +219,7 @@ func TestIncBookStock(t *testing.T) {
 		args: args{bookId: lastBook.BookId, deltaStock: -2},
 		want: database.APIResult{Ok: false},
 	})
+	lastBook.Stock = 1
 
 	/* randomly choose some books to do this operation */
 	for i := 0; i < numRandomTests; i++ {
@@ -246,7 +247,16 @@ func TestIncBookStock(t *testing.T) {
 	}
 
 	/* use query interface to check correctness */
-	// TODO: Implement query
+	sort.Slice(bookList, func(i, j int) bool {
+		return bookList[i].BookId < bookList[j].BookId
+	})
+	queryResult := server.QueryBooks(queries.BookQueryConditions{})
+	assert.Equal(t, queryResult.Ok, true)
+	selectedResults := queryResult.Payload.(queries.BookQueryResults)
+	assert.Equal(t, len(bookList), selectedResults.Count)
+	for i := 0; i < len(bookList); i++ {
+		assert.Equal(t, bookList[i], selectedResults.Results[i])
+	}
 }
 
 func TestBulkRegisterBook(t *testing.T) {
