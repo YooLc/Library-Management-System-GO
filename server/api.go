@@ -1,6 +1,7 @@
 package server
 
 import (
+	"database/sql"
 	"fmt"
 	"gorm.io/gorm"
 	"library-management-system/database"
@@ -310,8 +311,12 @@ func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.API
 // @param borrow information, include borrower &
 // book's id & time
 func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
-	//borrow.BorrowTime = time.Now().UnixMilli()
 	borrow.ReturnTime = 0
+	// Set the isolation level to handle concurrency transactions
+	opts := sql.TxOptions{
+		Isolation: sql.LevelSerializable,
+		ReadOnly:  false,
+	}
 	// Use the time from borrow.BorrowTime
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Check if there are enough books in stock
@@ -349,7 +354,7 @@ func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 
 		// Return nil to commit the transaction
 		return nil
-	})
+	}, &opts)
 
 	// If transaction failed, return error
 	if err != nil {

@@ -671,7 +671,51 @@ func TestBorrowAndReturnBook(t *testing.T) {
 }
 
 func TestParallelBorrowBook(t *testing.T) {
+	const numGoroutines = 16
+	server := Server{}
+	database.ResetDatabase()
 
+	// Insert some books & cards to database
+	library := utils.CreateLibrary(1, numGoroutines, 0, &server)
+	assert.Equal(t, server.IncBookStock(library.Books[0].BookId, -library.Books[0].Stock+1).Ok, true)
+
+	// Create a channel to communicate between goroutines
+	done := make(chan bool)
+	success := make(chan bool, numGoroutines)
+
+	// all goroutines connects to database
+	for i := 0; i < numGoroutines; i++ {
+		go func(i int) {
+			// Each goroutine borrows a book using a different cardId
+			borrow := database.CreateBorrow(library.Cards[i].CardId, 1)
+			result := server.BorrowBook(borrow)
+			if result.Ok {
+				success <- true
+			}
+
+			// Signal that this goroutine is done
+			done <- true
+		}(i)
+	}
+
+	// Wait for all goroutines to finish
+	for i := 0; i < numGoroutines; i++ {
+		<-done
+	}
+
+	// Check if only one goroutine has successfully borrowed the book
+	successCount := 0
+	for i := 0; i < numGoroutines; i++ {
+		select {
+		case <-success:
+			successCount++
+		default:
+		}
+	}
+
+	if successCount != 1 {
+		t.Errorf("Expected 1 goroutine to successfully borrow the book, but got %d", successCount)
+	}
 }
 
 func TestRegisterAndShowAndRemoveCard(t *testing.T) {
@@ -738,7 +782,6 @@ func filter(arr []*database.Book, cond func(*database.Book) bool) []*database.Bo
 }
 
 func verifyQueryResult(books []*database.Book, conditions queries.BookQueryConditions) []*database.Book {
-	fmt.Printf("%v\n", conditions)
 	var result []*database.Book
 	for _, book := range books {
 		result = append(result, book)
