@@ -2,3 +2,4 @@ library-management-system
 *.db
 config.yaml
 .idea/
+node_modules/
