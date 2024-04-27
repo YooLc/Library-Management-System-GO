@@ -46,6 +46,9 @@
             <el-form-item>
                 <el-button type="primary" @click="QueryBooks(condition)">搜索</el-button>
             </el-form-item>
+            <el-form-item>
+                <el-button type="success" @click="addBookVisible = true" icon="Plus">添加图书</el-button>
+            </el-form-item>
         </el-form>
     
         <el-table
@@ -77,6 +80,39 @@
                 </template>
             </el-table-column>
         </el-table>
+
+        <!-- 添加图书对话框 -->
+        <el-dialog v-model="addBookVisible" title="编辑书籍信息">
+            <el-form :model="addBook" label-width="80px">
+                <el-form-item label="分类">
+                    <el-input v-model="addBook.category"></el-input>
+                </el-form-item>
+                <el-form-item label="标题">
+                    <el-input v-model="addBook.title"></el-input>
+                </el-form-item>
+                <el-form-item label="出版社">
+                    <el-input v-model="addBook.press"></el-input>
+                </el-form-item>
+                <el-form-item label="出版年份">
+                    <el-input-number v-model="addBook.publish_year" placeholder="出版年份"></el-input-number>
+                </el-form-item>
+                <el-form-item label="作者">
+                    <el-input v-model="addBook.author"></el-input>
+                </el-form-item>
+                <el-form-item label="价格">
+                    <el-input-number v-model="addBook.price" placeholder="价格"></el-input-number>
+                </el-form-item>
+                <el-form-item label="库存">
+                    <el-input-number v-model="addBook.stock" placeholder="库存"></el-input-number>
+                </el-form-item>
+            </el-form>
+            <template #footer>
+                <span class="dialog-footer">
+                    <el-button @click="addBookVisible = false">取消</el-button>
+                    <el-button type="success" @click="AddBook(addBook)">添加</el-button>
+                </span>
+            </template>
+        </el-dialog>
 
         <!-- 借书对话框 -->
         <el-dialog v-model="borrowBookVisible" title="借书" width="30%">
@@ -129,19 +165,19 @@
                     <el-input v-model="curRow.press"></el-input>
                 </el-form-item>
                 <el-form-item label="出版年份">
-                    <el-input v-model="curRow.publish_year"></el-input>
+                    <el-input-number v-model="curRow.publish_year" placeholder="出版年份"></el-input-number>
                 </el-form-item>
                 <el-form-item label="作者">
                     <el-input v-model="curRow.author"></el-input>
                 </el-form-item>
                 <el-form-item label="价格">
-                    <el-input v-model="curRow.price"></el-input>
+                    <el-input-number v-model="curRow.price" placeholder="价格"></el-input-number>
                 </el-form-item>
             </el-form>
             <template #footer>
                 <span class="dialog-footer">
                     <el-button @click="modifyBookVisible = false">取消</el-button>
-                    <el-button type="success" @click="Edit_book(curRow)">修改</el-button>
+                    <el-button type="success" @click="EditBook(curRow)">修改</el-button>
                 </span>
             </template>
         </el-dialog>
@@ -252,7 +288,7 @@ const RemoveBook = (id) => {
     })
 }
 
-const Edit_book = (book) => {
+const EditBook = (book) => {
     book.publish_year = parseInt(book.publish_year)
     book.price = parseFloat(book.price)
 
@@ -291,6 +327,24 @@ const BorrowBook = (book: Book, card_id) => {
     })
 }
 
+const AddBook = (book) => {
+    book.publish_year = parseInt(book.publish_year)
+    book.price = parseFloat(book.price)
+    book.stock = parseInt(book.stock)
+
+    axios.post('/book/add', book)
+    .then((res) => {
+        if (!res.data.ok) {
+            ElMessage.error('添加失败: ' + res.data.message)
+            return
+        }
+        ElMessage.success('添加成功')
+        book = res.data.payload
+        tableData.value.push(book)
+        addBookVisible.value = false
+    })
+}
+
 const search = ref('')
 const removeBookVisible = ref(false)
 const incStockVisible = ref(false)
@@ -300,4 +354,15 @@ const modifyBookVisible = ref(false)
 const condition = ref(nullCondition)
 const borrowCardId = ref(1)
 const borrowBookVisible = ref(false)
+const addBookVisible = ref(false)
+const addBook = ref({
+    book_id: 0,
+    category: '',
+    title: '',
+    press: '',
+    publish_year: null,
+    author: '',
+    price: null,
+    stock: null
+} as Book)
 </script>

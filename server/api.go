@@ -2,10 +2,13 @@ package server
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 	"library-management-system/database"
 	"library-management-system/server/queries"
+	"net/http"
 )
 
 type Server struct{}
@@ -41,6 +44,7 @@ func (s *Server) StoreBook(book *database.Book) database.APIResult {
 	// Store the book
 	// BookID is set via gorm
 	// the database prevents duplicate book entries by primary key constraint
+	book.BookId = 0
 	if err := database.DB.Create(book).Error; err != nil {
 		return database.APIResult{
 			Ok:      false,
@@ -51,7 +55,7 @@ func (s *Server) StoreBook(book *database.Book) database.APIResult {
 	return database.APIResult{
 		Ok:      true,
 		Message: "Book stored successfully",
-		Payload: book.BookId,
+		Payload: book,
 	}
 }
 
@@ -124,6 +128,7 @@ func (s *Server) StoreBooks(books []*database.Book) database.APIResult {
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// Add creation of each book to the transaction
 		for _, book := range books {
+			book.BookId = 0
 			if err := tx.Create(book).Error; err != nil {
 				return err
 			}
@@ -549,5 +554,16 @@ func (s *Server) ShowCards() database.APIResult {
 		Ok:      true,
 		Message: "Cards fetched successfully",
 		Payload: cards,
+	}
+}
+
+// Response
+func (s *Server) Response(w http.ResponseWriter, resp database.APIResult) {
+	w.Header().Set("Content-Type", "application/json")
+	bytes, _ := json.Marshal(resp)
+	_, err := w.Write(bytes)
+	if err != nil {
+		logrus.Fatal("unable to response")
+		return
 	}
 }
