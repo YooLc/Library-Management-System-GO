@@ -49,6 +49,9 @@
             <el-form-item>
                 <el-button type="success" @click="addBookVisible = true" icon="Plus">添加图书</el-button>
             </el-form-item>
+            <el-form-item>
+                <el-button type="warning" @click="bulkAddBookVisible = true" icon="Plus">批量导入</el-button>
+            </el-form-item>
         </el-form>
     
         <el-table
@@ -112,6 +115,20 @@
                     <el-button type="success" @click="AddBook(addBook)">添加</el-button>
                 </span>
             </template>
+        </el-dialog>
+
+        <!-- 批量导入对话框 -->
+        <el-dialog v-model="bulkAddBookVisible" title="批量导入图书" width="30%">
+            <el-upload
+                class="upload-demo"
+                drag
+                :auto-upload="false"
+                :on-change="onBulkUpload"
+                accept=".csv">
+                <i class="el-icon-upload"></i>
+                <div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+                <div class="el-upload__tip" slot="tip">只能上传 .csv 文件</div>
+            </el-upload>
         </el-dialog>
 
         <!-- 借书对话框 -->
@@ -188,6 +205,7 @@
 import axios from 'axios'
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+// import { FileReader } from 'file-api';
 
 interface Book {
     book_id: number
@@ -345,6 +363,49 @@ const AddBook = (book) => {
     })
 }
 
+const onBulkUpload = (file) => {
+    const reader = new FileReader()
+    // read file content
+    reader.onload = () => {
+        const data = reader.result
+        const lines = (data as string).split('\n')
+        console.log(data, lines)
+        const books = []
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].split(',')
+            if (line.length != 7) {
+                continue
+            }
+            books.push({
+                book_id: 0,
+                category: line[0],
+                title: line[1],
+                press: line[2],
+                publish_year: parseInt(line[3]),
+                author: line[4],
+                price: parseFloat(line[5]),
+                stock: parseInt(line[6])
+            })
+        }
+        let bulkAdd = {
+            count: books.length,
+            books: books
+        }
+        console.log(bulkAdd)
+        axios.post('/book/adds', bulkAdd)
+        .then((res) => {
+            if (!res.data.ok) {
+                ElMessage.error('批量导入失败: ' + res.data.message)
+                return
+            }
+            ElMessage.success('批量导入成功')
+            tableData.value = tableData.value.concat(res.data.payload)
+            bulkAddBookVisible.value = false
+        })
+    }
+    reader.readAsText(file.raw)
+}
+
 const search = ref('')
 const removeBookVisible = ref(false)
 const incStockVisible = ref(false)
@@ -365,4 +426,6 @@ const addBook = ref({
     price: null,
     stock: null
 } as Book)
+const bulkAddBookVisible = ref(false)
+const bulkAddList = ref([])
 </script>

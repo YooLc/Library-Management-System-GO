@@ -44,7 +44,6 @@ func (s *Server) StoreBook(book *database.Book) database.APIResult {
 	// Store the book
 	// BookID is set via gorm
 	// the database prevents duplicate book entries by primary key constraint
-	book.BookId = 0
 	if err := database.DB.Create(book).Error; err != nil {
 		return database.APIResult{
 			Ok:      false,

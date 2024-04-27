@@ -168,7 +168,7 @@ func TestIncBookStock(t *testing.T) {
 	for book, i := range books {
 		result := server.StoreBook(&book)
 		assert.Equal(t, result.Ok, true)
-		bookIds[result.Payload.(int)] = i
+		bookIds[result.Payload.(*database.Book).BookId] = i
 		bookList = append(bookList, &book)
 	}
 	assert.Equal(t, len(books), len(bookIds))
