@@ -3,3 +3,4 @@ library-management-system
 config.yaml
 .idea/
 node_modules/
+log/

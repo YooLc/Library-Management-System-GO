@@ -205,7 +205,6 @@
 import axios from 'axios'
 import { onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-// import { FileReader } from 'file-api';
 
 interface Book {
     book_id: number
@@ -401,6 +400,7 @@ const onBulkUpload = (file) => {
             ElMessage.success('批量导入成功')
             tableData.value = tableData.value.concat(res.data.payload)
             bulkAddBookVisible.value = false
+            QueryBooks(nullCondition)
         })
     }
     reader.readAsText(file.raw)

@@ -14,8 +14,8 @@ import (
 var DB *gorm.DB
 
 type AppConfig struct {
-	Server   server.Config           `yaml:"server"`
-	Database database.DatabaseConfig `yaml:"database"`
+	Server   server.Config   `yaml:"server"`
+	Database database.Config `yaml:"database"`
 }
 
 func main() {

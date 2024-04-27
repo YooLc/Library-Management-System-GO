@@ -2,8 +2,6 @@ package server
 
 import (
 	"fmt"
-	"github.com/go-playground/assert/v2"
-	"gopkg.in/yaml.v3"
 	"library-management-system/database"
 	"library-management-system/server/queries"
 	"library-management-system/utils"
@@ -13,11 +11,14 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/go-playground/assert/v2"
+	"gopkg.in/yaml.v3"
 )
 
 type AppConfig struct {
-	Server   Config                  `yaml:"server"`
-	Database database.DatabaseConfig `yaml:"database"`
+	Server   Config          `yaml:"server"`
+	Database database.Config `yaml:"database"`
 }
 
 func TestMain(m *testing.M) {
