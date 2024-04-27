@@ -13,7 +13,7 @@
             <div class="cardBox" v-for="card in cards" v-show="card.name.includes(toSearch)" :key="card.cardId">
                 <div>
                     <!-- 卡片标题 -->
-                    <div style="font-size: 25px; font-weight: bold;">No. {{ card.cardId }}</div>
+                    <div style="font-size: 25px; font-weight: bold;">No. {{ card.card_id }}</div>
 
                     <el-divider />
 
@@ -30,7 +30,7 @@
                     <!-- 卡片操作 -->
                     <div style="margin-top: 5px;">
                         <el-button type="danger" :icon="Delete" round
-                            @click="this.toRemove = card.cardId, this.removeCardVisible = true" >删除</el-button>
+                            @click="this.toRemove = card.card_id, this.removeCardVisible = true" >删除</el-button>
                     </div>
 
                 </div>
@@ -59,7 +59,7 @@
             </div>
             <div style="margin-left: 2vw;   font-weight: bold; font-size: 1rem; margin-top: 20px; ">
                 类型：
-                <el-select v-model="newCardInfo.type" size="middle" style="width: 12.5vw;">
+                <el-select v-model="newCardInfo.value" size="middle" style="width: 12.5vw;">
                     <el-option v-for="type in types" :key="type.value" :label="type.label" :value="type.value" />
                 </el-select>
             </div>
@@ -99,12 +99,12 @@ export default {
     data() {
         return {
             cards: [{ // 借书证列表
-                cardId: 1,
+                card_id: 1,
                 name: '小明',
                 department: 'Computer Science',
                 type: '学生'
             }, {
-                cardId: 2,
+                card_id: 2,
                 name: '王老师',
                 department: '计算机科学与技术学院',
                 type: '教师'
@@ -129,36 +129,60 @@ export default {
             newCardInfo: { // 待新建借书证信息
                 name: '',
                 department: '',
-                type: '学生'
+                value: 'S'
             }
         }
     },
     methods: {
         ConfirmNewCard() {
             // 发出POST请求
-            axios.post("/card",
+            axios.post("/card/add",
                 { // 请求体
                     name: this.newCardInfo.name,
                     department: this.newCardInfo.department,
-                    type: this.newCardInfo.type
+                    type: this.newCardInfo.value
                 })
                 .then(response => {
-                    ElMessage.success("借书证新建成功") // 显示消息提醒
+                    if (response.data.ok) {
+                        ElMessage.success("借书证新建成功") // 显示消息提醒
+                    } else {
+                        ElMessage.error("借书证创建失败: " + response.data.payload.Message) // 显示消息提醒
+                    }
                     this.newCardVisible = false // 将对话框设置为不可见
                     this.QueryCards() // 重新查询借书证以刷新页面
                 })
         },
         ConfirmRemoveCard() {
-            // TODO: YOUR CODE HERE
+            axios.delete("/card/remove",
+            { // 请求体
+                params: {
+                    card_id: this.toRemove
+                }
+            })
+            .then(response => {
+                console.log(response.data)
+                if (response.data.ok) {
+                    ElMessage.success("借书证删除成功") // 显示消息提醒
+                } else {
+                    ElMessage.error("借书证删除失败: " + response.data.message) // 显示消息提醒
+                }
+                this.removeCardVisible = false // 将对话框设置为不可见
+                this.QueryCards() // 重新查询借书证以刷新页面
+            })
         },
         QueryCards() {
             this.cards = [] // 清空列表
-            let response = axios.get('/card') // 向/card发出GET请求
+            let response = axios.get('/card/query') // 向/card发出GET请求
                 .then(response => {
-                    let cards = response.data // 接收响应负载
-                    cards.forEach(card => { // 对于每个借书证
-                        this.cards.push(card) // 将其加入到列表中
-                    })
+                    if (response.data.ok == false) { // 如果请求失败
+                        return ElMessage.error("借书证查询失败: " + response.data.payload.Message) // 显示消息提醒
+                    } else {
+                        let cards = response.data.payload.cards // 接收响应负载
+                        cards.forEach(card => { // 对于每个借书证
+                            card.type = (card.type == "T") ? "教师" : "学生" // 将类型转换为中文
+                            this.cards.push(card) // 将其加入到列表中
+                        })
+                    }
                 })
         }
     },

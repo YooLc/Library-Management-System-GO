@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"library-management-system/database"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/rs/cors"
@@ -11,8 +12,9 @@ import (
 )
 
 type Config struct {
-	Host string `yaml:"host"`
-	Port string `yaml:"port"`
+	Host     string `yaml:"host"`
+	Port     string `yaml:"port"`
+	Frontend string `yaml:"frontend"`
 }
 
 var mutex = &sync.Mutex{}
@@ -72,22 +74,72 @@ func incBookStockHandler(w http.ResponseWriter, r *http.Request) {
 	//response(w, result)
 }
 
+func showCardsHandler(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	server := Server{}
+	result := server.ShowCards()
+	response(w, result)
+}
+
+func registerCardHandler(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	server := Server{}
+	var cardData database.Card
+	if err := json.NewDecoder(r.Body).Decode(&cardData); err != nil {
+		response(w, database.APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request body",
+			Payload: nil,
+		})
+		return
+	}
+
+	res := server.RegisterCard(&cardData)
+	response(w, res)
+}
+
+func removeCardHandler(w http.ResponseWriter, r *http.Request) {
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	server := Server{}
+
+	params := r.URL.Query()
+	cardIdStr := params.Get("card_id")
+	var err error
+	var cardId int
+	if cardId, err = strconv.Atoi(cardIdStr); err != nil || cardId <= 0 {
+		response(w, database.APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request parameter, expect positive integer",
+			Payload: nil,
+		})
+		return
+	}
+	res := server.RemoveCard(cardId)
+	response(w, res)
+}
+
 func InitServer(config Config) {
 	// Configure logrus
 	// initLogger()
 	mux := http.NewServeMux()
 
 	// Add CORS handler
-	corsHandler := cors.Default()
+	corsHandler := cors.AllowAll()
 	handler := corsHandler.Handler(mux)
 
-	// fs := http.FileServer(http.Dir(frontend))
+	//fs := http.FileServer(http.Dir(config.Frontend))
 
 	// Set X-Content-Type-Options to nosniff to enhance security
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodGet {
 			w.Header().Set("X-Content-Type-Options", "nosniff")
-			// fs.ServeHTTP(w, r)
+			//fs.ServeHTTP(w, r)
 		} else {
 			handler.ServeHTTP(w, r)
 		}
@@ -95,6 +147,9 @@ func InitServer(config Config) {
 
 	mux.HandleFunc("/store", storeBookHandler)
 	mux.HandleFunc("/incStock", incBookStockHandler)
+	mux.HandleFunc("/card/query", showCardsHandler)
+	mux.HandleFunc("/card/add", registerCardHandler)
+	mux.HandleFunc("/card/remove", removeCardHandler)
 
 	host, port := config.Host, config.Port
 	logrus.Info("Server will run on " + host + ":" + port)

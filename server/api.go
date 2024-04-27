@@ -460,13 +460,19 @@ func (s *Server) ShowBorrowHistories(cardId int) database.APIResult {
 //
 // @param card all attributes of the card
 func (s *Server) RegisterCard(card *database.Card) database.APIResult {
-	// Create a new borrow card
-	if err := database.DB.Create(card).Error; err != nil {
-		// Check if the card already exists by primary key
+	if card.Type != "T" && card.Type != "S" {
 		return database.APIResult{
 			Ok:      false,
-			Message: "This card already exists",
+			Message: "Invalid card type, should be 'T' or 'S'",
 			Payload: nil,
+		}
+	}
+	// Create a new borrow card
+	if err := database.DB.Create(card).Error; err != nil {
+		return database.APIResult{
+			Ok:      false,
+			Message: "Failed to register card, maybe the card already exists",
+			Payload: err,
 		}
 	}
 	return database.APIResult{
@@ -525,7 +531,7 @@ func (s *Server) RemoveCard(cardId int) database.APIResult {
 //	and should be an instance of {@link queries.CardList}
 func (s *Server) ShowCards() database.APIResult {
 	cards := queries.CardList{}
-	result := database.DB.Find(&cards.Cards)
+	result := database.DB.Order("card_id asc").Find(&cards.Cards)
 	if result.Error != nil {
 		return database.APIResult{
 			Ok:      false,
