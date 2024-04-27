@@ -11,7 +11,6 @@
 
         <!-- 查询框 -->
         <div style="width:30%;margin:0 auto; padding-top:5vh;">
-
             <el-input v-model="this.toQuery" style="display:inline; " placeholder="输入借书证ID"></el-input>
             <el-button style="margin-left: 10px;" type="primary" @click="QueryBorrows">查询</el-button>
 
@@ -21,10 +20,10 @@
         <el-table v-if="isShow" :data="fitlerTableData" height="600"
             :default-sort="{ prop: 'borrowTime', order: 'ascending' }" :table-layout="'auto'"
             style="width: 100%; margin-left: 50px; margin-top: 30px; margin-right: 50px; max-width: 80vw;">
-            <el-table-column prop="cardId" label="借书证ID" />
-            <el-table-column prop="bookId" label="图书ID" sortable />
-            <el-table-column prop="borrowTime" label="借出时间" sortable />
-            <el-table-column prop="returnTime" label="归还时间" sortable />
+            <el-table-column prop="card_id" label="借书证ID" />
+            <el-table-column prop="book_id" label="图书ID" sortable />
+            <el-table-column prop="borrow_time" label="借出时间" sortable />
+            <el-table-column prop="return_time" label="归还时间" sortable />
         </el-table>
 
     </el-scrollbar>
@@ -33,16 +32,17 @@
 <script>
 import axios from 'axios';
 import { Search } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus';
 
 export default {
     data() {
         return {
             isShow: false, // 结果表格展示状态
             tableData: [{ // 列表项
-                cardId: 1,
-                bookId: 1,
-                borrowTime: "2024.03.04 21:48",
-                returnTime: "2024.03.04 21:49"
+                car_id: 1,
+                boo_id: 1,
+                borrow_time: "2024.03.04 21:48",
+                return_time: "2024.03.04 21:49"
             }],
             toQuery: '', // 待查询内容(对某一借书证号进行查询)
             toSearch: '', // 待搜索内容(对查询到的结果进行搜索)
@@ -63,11 +63,18 @@ export default {
     methods: {
         async QueryBorrows() {
             this.tableData = [] // 清空列表
-            let response = await axios.get('/borrow', { params: { cardId: this.toQuery } }) // 向/borrow发出GET请求，参数为cardID=this.toQuery
-            let borrows = response.data // 获取响应负载
-            borrows.forEach(borrow => { // 对于每一个借书记录
-                this.tableData.push(borrow) // 将它加入到列表项中
-            });
+            let response = await axios.get('/borrow/query', { params: { card_id: this.toQuery } }) // 向/borrow发出GET请求，参数为cardID=this.toQuery
+            if (response.data.ok == false) {
+                ElMessage.error(response.data.message) // 若请求失败，弹出错误信息
+                return
+            }
+            let borrows = response.data.payload.items // 获取响应负载
+            console.log(response.data)
+            if (response.data.payload.count > 0) {
+                borrows.forEach(borrow => { // 对于每一个借书记录
+                    this.tableData.push(borrow) // 将它加入到列表项中
+                });
+            }
             this.isShow = true // 显示结果列表
         }
     }

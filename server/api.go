@@ -243,7 +243,9 @@ func (s *Server) ModifyBookInfo(book *database.Book) database.APIResult {
 //	and should be an instance of {@link queries.BookQueryResults}
 func (s *Server) QueryBooks(conditions queries.BookQueryConditions) database.APIResult {
 	// Query books
-	books := queries.BookQueryResults{}
+	books := queries.BookQueryResults{
+		Results: make([]database.Book, 0),
+	}
 
 	query := database.DB.Model(&database.Book{})
 	if conditions.Category != "" {
@@ -430,7 +432,9 @@ func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
 //
 //	and should be an instance of {@link queries.BorrowHistories}
 func (s *Server) ShowBorrowHistories(cardId int) database.APIResult {
-	history := queries.BorrowHistories{}
+	history := queries.BorrowHistories{
+		Items: make([]database.Borrow, 0),
+	}
 	err := database.DB.Model(&database.Borrow{}).
 		Joins("natural join books").
 		Where("borrows.card_id = ?", cardId).

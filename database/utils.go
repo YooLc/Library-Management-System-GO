@@ -46,5 +46,5 @@ func ConnectDatabase(config DatabaseConfig) {
 		logrus.WithError(err).Panic("failed to connect database")
 	}
 	logrus.Info("connected to database ", DB.Name())
-	ResetDatabase()
+	//ResetDatabase()
 }

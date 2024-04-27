@@ -5,6 +5,6 @@ import (
 )
 
 type BorrowHistories struct {
-	Count int               `json:"cnt"`
+	Count int               `json:"count"`
 	Items []database.Borrow `json:"items"`
 }
