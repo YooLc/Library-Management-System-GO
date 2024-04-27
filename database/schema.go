@@ -34,10 +34,10 @@ type Card struct {
 }
 
 type Borrow struct {
-	CardId     int   `gorm:"primaryKey"`
-	BookId     int   `gorm:"primaryKey"`
-	BorrowTime int64 `gorm:"primaryKey;not null"`
-	ReturnTime int64 `gorm:"default:0"`
+	CardId     int   `json:"card_id" gorm:"primaryKey"`
+	BookId     int   `json:"book_id" gorm:"primaryKey"`
+	BorrowTime int64 `json:"borrow_time" gorm:"primaryKey;not null"`
+	ReturnTime int64 `json:"return_time" gorm:"default:0"`
 }
 
 func (b *Borrow) ResetBorrowTime() {

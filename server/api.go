@@ -380,13 +380,14 @@ func (s *Server) BorrowBook(borrow database.Borrow) database.APIResult {
 // @param borrow
 // borrow information, include borrower & book's id & return time
 func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
-	if borrow.ReturnTime <= borrow.BorrowTime || borrow.BorrowTime == 0 {
+	if borrow.ReturnTime <= borrow.BorrowTime {
 		return database.APIResult{
 			Ok:      false,
 			Message: "Return time should be later than borrow time",
 			Payload: nil,
 		}
 	}
+	borrow.BorrowTime = 0 // cannot modify borrow time
 	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// return_time = 0 because a book can be borrowed
 		// multiple times by the same card (but not the same time)
@@ -412,7 +413,7 @@ func (s *Server) ReturnBook(borrow database.Borrow) database.APIResult {
 	if err != nil {
 		return database.APIResult{
 			Ok:      false,
-			Message: "Failed to return book",
+			Message: "Failed to return book, maybe the user have returned the book or the book is not borrowed",
 			Payload: err,
 		}
 	}

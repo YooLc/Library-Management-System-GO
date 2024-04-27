@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"library-management-system/database"
 	"library-management-system/server/queries"
 	"net/http"
@@ -181,6 +182,7 @@ func queryBookHandler(w http.ResponseWriter, r *http.Request) {
 		SortBy:         queries.SortColumn(params.Get("sort_by")),
 		SortOrder:      queries.Order(params.Get("sort_order")),
 	}
+	fmt.Printf("Query condition: %v\n", condition)
 	result := server.QueryBooks(condition)
 	response(w, result)
 }
@@ -209,6 +211,79 @@ func incBookStockHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Increment book stock
 	result := server.IncBookStock(query.BookId, query.DeltaStock)
+	response(w, result)
+}
+
+func modifyBookHandler(w http.ResponseWriter, r *http.Request) {
+	// Lock mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Parse request body
+	server := Server{}
+	var book database.Book
+	err := json.NewDecoder(r.Body).Decode(&book)
+	if err != nil {
+		response(w, database.APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request body",
+			Payload: nil,
+		})
+		return
+	}
+
+	// Modify book
+	result := server.ModifyBookInfo(&book)
+	response(w, result)
+}
+
+func borrowBookHandler(w http.ResponseWriter, r *http.Request) {
+	// Lock mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Parse request body
+	server := Server{}
+	var borrow database.Borrow
+	err := json.NewDecoder(r.Body).Decode(&borrow)
+	if err != nil {
+		response(w, database.APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request body",
+			Payload: nil,
+		})
+		return
+	}
+
+	// Borrow book
+	borrow.ReturnTime = 0 // make sure ReturnTime is 0
+	result := server.BorrowBook(borrow)
+	response(w, result)
+}
+
+func returnBookHandler(w http.ResponseWriter, r *http.Request) {
+	// Lock mutex
+	mutex.Lock()
+	defer mutex.Unlock()
+
+	// Parse request body
+	server := Server{}
+	var borrow database.Borrow
+	err := json.NewDecoder(r.Body).Decode(&borrow)
+	if err != nil {
+		response(w, database.APIResult{
+			Ok:      false,
+			Message: "Invalid Arguments: failed to parse request body",
+			Payload: nil,
+		})
+		return
+	}
+
+	// Return book
+	if borrow.ReturnTime == 0 {
+		borrow.ResetReturnTime()
+	}
+	result := server.ReturnBook(borrow)
 	response(w, result)
 }
 
@@ -241,6 +316,9 @@ func InitServer(config Config) {
 	mux.HandleFunc("/book/remove", removeBookHandler)
 	mux.HandleFunc("/book/query", queryBookHandler)
 	mux.HandleFunc("/book/stock", incBookStockHandler)
+	mux.HandleFunc("/book/modify", modifyBookHandler)
+	mux.HandleFunc("/borrow/add", borrowBookHandler)
+	mux.HandleFunc("/borrow/return", returnBookHandler)
 
 	host, port := config.Host, config.Port
 	logrus.Info("Server will run on " + host + ":" + port)
