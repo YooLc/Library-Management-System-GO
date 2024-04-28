@@ -27,23 +27,22 @@ func InitServer(config Config) {
 	// Add routes
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
-		return
 	})
 
-	mux.HandleFunc("/book/add", storeBookHandler)
-	mux.HandleFunc("/book/adds", storeBooksHandler)
-	mux.HandleFunc("/book/remove", removeBookHandler)
-	mux.HandleFunc("/book/query", queryBookHandler)
-	mux.HandleFunc("/book/stock", incBookStockHandler)
-	mux.HandleFunc("/book/modify", modifyBookHandler)
+	mux.HandleFunc("/api/book/add", storeBookHandler)
+	mux.HandleFunc("/api/book/adds", storeBooksHandler)
+	mux.HandleFunc("/api/book/remove", removeBookHandler)
+	mux.HandleFunc("/api/book/query", queryBookHandler)
+	mux.HandleFunc("/api/book/stock", incBookStockHandler)
+	mux.HandleFunc("/api/book/modify", modifyBookHandler)
 
-	mux.HandleFunc("/card/query", showCardsHandler)
-	mux.HandleFunc("/card/add", registerCardHandler)
-	mux.HandleFunc("/card/remove", removeCardHandler)
+	mux.HandleFunc("/api/card/query", showCardsHandler)
+	mux.HandleFunc("/api/card/add", registerCardHandler)
+	mux.HandleFunc("/api/card/remove", removeCardHandler)
 
-	mux.HandleFunc("/borrow/query", showBorrowsHandler)
-	mux.HandleFunc("/borrow/add", borrowBookHandler)
-	mux.HandleFunc("/borrow/return", returnBookHandler)
+	mux.HandleFunc("/api/borrow/query", showBorrowsHandler)
+	mux.HandleFunc("/api/borrow/add", borrowBookHandler)
+	mux.HandleFunc("/api/borrow/return", returnBookHandler)
 
 	host, port := config.Host, config.Port
 	logrus.Info("Server will run on " + host + ":" + port)

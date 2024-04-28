@@ -12,7 +12,7 @@ const app = createApp(App)
 for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
     app.component(key, component)
 }
-axios.defaults.baseURL = 'http://localhost:8080';
+axios.defaults.baseURL = import.meta.env.VITE_APP_API_BASE_URL;
 app.use(createPinia())
 app.use(router)
 app.use(ElementPlus)

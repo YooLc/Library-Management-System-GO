@@ -14,7 +14,8 @@ if [ "$1" = "start" ]; then
     echo "Starting frontend server..."
     cd frontend
     pnpm install
-    nohup pnpm run dev > ../log/frontend.log &
+    pnpm run build
+    nohup pnpm run serve > ../log/frontend.log &
     echo $! > ../log/frontend.pid
 
     echo "Server started!"

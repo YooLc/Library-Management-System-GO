@@ -784,9 +784,7 @@ func filter(arr []*database.Book, cond func(*database.Book) bool) []*database.Bo
 
 func verifyQueryResult(books []*database.Book, conditions queries.BookQueryConditions) []*database.Book {
 	var result []*database.Book
-	for _, book := range books {
-		result = append(result, book)
-	}
+	result = append(result, books...)
 	if conditions.Category != "" {
 		result = filter(books, func(book *database.Book) bool {
 			return book.Category == conditions.Category

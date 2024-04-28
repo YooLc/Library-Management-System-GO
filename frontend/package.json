@@ -1,10 +1,11 @@
 {
   "name": "librarymanagementsystem",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "serve": "vite preview",
     "build": "vite build",
     "preview": "vite preview"
   },
